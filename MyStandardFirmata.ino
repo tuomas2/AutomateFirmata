@@ -49,6 +49,8 @@
 
 static const int PIN_MODE_VIRTUALWIRE_WRITE = 0x0C;
 static const int PIN_MODE_VIRTUALWIRE_READ = 0x0D;
+static const int SYSEX_VIRTUALWRITE_MESSAGE = 0x80;
+static const int SYSEX_DIGITAL_PULSE = 0x91;
 
 #ifdef FIRMATA_SERIAL_FEATURE
 SerialFirmata serialFeature;
@@ -362,7 +364,7 @@ void setPinModeCallback(byte pin, int mode)
     case PIN_MODE_VIRTUALWIRE_WRITE:
         if (IS_PIN_DIGITAL(pin)) {
             vw_set_tx_pin(pin);
-            vw_setup(2000);            
+            vw_setup(2000);
         }
         break;
     case PIN_MODE_VIRTUALWIRE_READ:
@@ -371,7 +373,8 @@ void setPinModeCallback(byte pin, int mode)
             vw_setup(2000);
             vw_rx_start();
         }
-        break;    case PIN_MODE_SERIAL:
+        break;
+    case PIN_MODE_SERIAL:
 #ifdef FIRMATA_SERIAL_FEATURE
       serialFeature.handlePinMode(pin, PIN_MODE_SERIAL);
 #endif
@@ -502,6 +505,9 @@ void sysexCallback(byte command, byte argc, byte *argv)
   unsigned int delayTime;
 
   switch (command) {
+    case SYSEX_VIRTUALWRITE_MESSAGE:
+        vw_send(argv, argc);
+        break;
     case I2C_REQUEST:
       mode = argv[1] & I2C_READ_WRITE_MODE_MASK;
       if (argv[1] & I2C_10BIT_ADDRESS_MODE_MASK) {
@@ -776,6 +782,9 @@ void setup()
  *============================================================================*/
 void loop()
 {
+  uint8_t buf[VW_MAX_MESSAGE_LEN];
+  uint8_t buflen = VW_MAX_MESSAGE_LEN;
+   
   byte pin, analogPin;
 
   /* DIGITALREAD - as fast as possible, check for changes and output them to the
@@ -808,7 +817,17 @@ void loop()
       }
     }
   }
-
+  
+  if (vw_get_message(buf, &buflen))
+  {
+    Firmata.write(START_SYSEX);
+    Firmata.write(SYSEX_DIGITAL_PULSE);
+    for(int i=0; i < buflen; i++)
+    {
+        Firmata.write(buf[i]);
+    }
+    Firmata.write(END_SYSEX);
+  }
 #ifdef FIRMATA_SERIAL_FEATURE
   serialFeature.update();
 #endif
