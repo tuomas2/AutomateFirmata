@@ -24,7 +24,6 @@
 */
 
 #include <VirtualWire.h>
-#include <Servo.h>
 #include <Wire.h>
 #include <Firmata.h>
 
@@ -86,12 +85,6 @@ boolean isI2CEnabled = false;
 signed char queryIndex = -1;
 // default delay time between i2c read request and Wire.requestFrom()
 unsigned int i2cReadDelayTime = 0;
-
-Servo servos[MAX_SERVOS];
-byte servoPinMap[TOTAL_PINS];
-byte detachedServos[MAX_SERVOS];
-byte detachedServoCount = 0;
-byte servoCount = 0;
 
 boolean isResetting = false;
 
@@ -185,44 +178,6 @@ void setPwmFrequency(int pin, int divisor) {
     }
     TCCR2B = TCCR2B & 0b11111000 | mode;
   }
-}
-
-void attachServo(byte pin, int minPulse, int maxPulse)
-{
-  if (servoCount < MAX_SERVOS) {
-    // reuse indexes of detached servos until all have been reallocated
-    if (detachedServoCount > 0) {
-      servoPinMap[pin] = detachedServos[detachedServoCount - 1];
-      if (detachedServoCount > 0) detachedServoCount--;
-    } else {
-      servoPinMap[pin] = servoCount;
-      servoCount++;
-    }
-    if (minPulse > 0 && maxPulse > 0) {
-      servos[servoPinMap[pin]].attach(PIN_TO_DIGITAL(pin), minPulse, maxPulse);
-    } else {
-      servos[servoPinMap[pin]].attach(PIN_TO_DIGITAL(pin));
-    }
-  } else {
-    Firmata.sendString("Max servos attached");
-  }
-}
-
-void detachServo(byte pin)
-{
-  servos[servoPinMap[pin]].detach();
-  // if we're detaching the last servo, decrement the count
-  // otherwise store the index of the detached servo
-  if (servoPinMap[pin] == servoCount && servoCount > 0) {
-    servoCount--;
-  } else if (servoCount > 0) {
-    // keep track of detached servos because we want to reuse their indexes
-    // before incrementing the count of attached servos
-    detachedServoCount++;
-    detachedServos[detachedServoCount - 1] = servoPinMap[pin];
-  }
-
-  servoPinMap[pin] = 255;
 }
 
 void enableI2CPins()
@@ -337,11 +292,6 @@ void setPinModeCallback(byte pin, int mode)
     // the following if statements should reconfigure the pins properly
     disableI2CPins();
   }
-  if (IS_PIN_DIGITAL(pin) && mode != PIN_MODE_SERVO) {
-    if (servoPinMap[pin] < MAX_SERVOS && servos[servoPinMap[pin]].attached()) {
-      detachServo(pin);
-    }
-  }
   if (IS_PIN_ANALOG(pin)) {
     reportAnalogCallback(PIN_TO_ANALOG(pin), mode == PIN_MODE_ANALOG ? 1 : 0); // turn on/off reporting
   }
@@ -402,16 +352,6 @@ void setPinModeCallback(byte pin, int mode)
         Firmata.setPinMode(pin, PIN_MODE_PWM);
       }
       break;
-    case PIN_MODE_SERVO:
-      if (IS_PIN_DIGITAL(pin)) {
-        Firmata.setPinMode(pin, PIN_MODE_SERVO);
-        if (servoPinMap[pin] == 255 || !servos[servoPinMap[pin]].attached()) {
-          // pass -1 for min and max pulse values to use default values set
-          // by Servo library
-          attachServo(pin, -1, -1);
-        }
-      }
-      break;
     case PIN_MODE_I2C:
       if (IS_PIN_I2C(pin)) {
         // mark the pin as i2c
@@ -462,11 +402,6 @@ void analogWriteCallback(byte pin, int value)
 {
   if (pin < TOTAL_PINS) {
     switch (Firmata.getPinMode(pin)) {
-      case PIN_MODE_SERVO:
-        if (IS_PIN_DIGITAL(pin))
-          servos[servoPinMap[pin]].write(value);
-        Firmata.setPinState(pin, value);
-        break;
       case PIN_MODE_PWM:
         if (IS_PIN_PWM(pin))
           analogWrite(PIN_TO_PWM(pin), value);
@@ -676,22 +611,6 @@ void sysexCallback(byte command, byte argc, byte *argv)
       }
 
       break;
-    case SERVO_CONFIG:
-      if (argc > 4) {
-        // these vars are here for clarity, they'll optimized away by the compiler
-        byte pin = argv[0];
-        int minPulse = argv[1] + (argv[2] << 7);
-        int maxPulse = argv[3] + (argv[4] << 7);
-
-        if (IS_PIN_DIGITAL(pin)) {
-          if (servoPinMap[pin] < MAX_SERVOS && servos[servoPinMap[pin]].attached()) {
-            detachServo(pin);
-          }
-          attachServo(pin, minPulse, maxPulse);
-          setPinModeCallback(pin, PIN_MODE_SERVO);
-        }
-      }
-      break;
     case SAMPLING_INTERVAL:
       if (argc > 1) {
         samplingInterval = argv[0] + (argv[1] << 7);
@@ -729,10 +648,6 @@ void sysexCallback(byte command, byte argc, byte *argv)
         if (IS_PIN_PWM(pin)) {
           Firmata.write(PIN_MODE_PWM);
           Firmata.write(DEFAULT_PWM_RESOLUTION);
-        }
-        if (IS_PIN_DIGITAL(pin)) {
-          Firmata.write(PIN_MODE_SERVO);
-          Firmata.write(14);
         }
         if (IS_PIN_I2C(pin)) {
           Firmata.write(PIN_MODE_I2C);
@@ -812,14 +727,10 @@ void systemResetCallback()
       // sets the output to 0, configures portConfigInputs
       setPinModeCallback(i, OUTPUT);
     }
-
-    servoPinMap[i] = 255;
   }
   // by default, do not report any analog inputs
   analogInputsToReport = 0;
 
-  detachedServoCount = 0;
-  servoCount = 0;
 
   /* send digital inputs to set the initial state on the host computer,
    * since once in the loop(), this firmware will only send on change */
