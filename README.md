@@ -9,5 +9,5 @@ Standard Firmata with the following special features
    (VirtualWire can't be used together with pins in ports 9/10).
 
 
-Requires VirtualWire: https://github.com/danielesteban/ArduinoLib/tree/master/VirtualWire
+Requires VirtualWire: https://github.com/danielesteban/ArduinoLib/tree/master/VirtualWire @ eec925d  
 Is based on StandardFirmata https://github.com/firmata/arduino/blob/master/examples/StandardFirmata/StandardFirmata.ino @ 281b99f  
