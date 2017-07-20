@@ -23,6 +23,7 @@
   Last updated October 16th, 2016
 */
 
+#include <VirtualWire.h>
 #include <Servo.h>
 #include <Wire.h>
 #include <Firmata.h>
@@ -46,6 +47,9 @@
 /*==============================================================================
  * GLOBAL VARIABLES
  *============================================================================*/
+
+static const int PIN_MODE_VIRTUALWIRE_WRITE = 0x0C;
+static const int PIN_MODE_VIRTUALWIRE_READ = 0x0D;
 
 #ifdef FIRMATA_SERIAL_FEATURE
 SerialFirmata serialFeature;
@@ -415,7 +419,19 @@ void setPinModeCallback(byte pin, int mode)
         Firmata.setPinMode(pin, PIN_MODE_I2C);
       }
       break;
-    case PIN_MODE_SERIAL:
+    case PIN_MODE_VIRTUALWIRE_WRITE:
+        if (IS_PIN_DIGITAL(pin)) {
+            vw_set_tx_pin(pin);
+            vw_setup(2000);            
+        }
+        break;
+    case PIN_MODE_VIRTUALWIRE_READ:
+        if (IS_PIN_DIGITAL(pin)) {
+            vw_set_rx_pin(pin);
+            vw_setup(2000);
+            vw_rx_start();
+        }
+        break;    case PIN_MODE_SERIAL:
 #ifdef FIRMATA_SERIAL_FEATURE
       serialFeature.handlePinMode(pin, PIN_MODE_SERIAL);
 #endif
