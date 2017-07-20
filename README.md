@@ -1,4 +1,5 @@
 Standard Firmata with the following special features
+====================================================
 
  - VirtualWire support added. 
    Configuration with pin modes: 0x0C for writing, 0x0D for reading.
