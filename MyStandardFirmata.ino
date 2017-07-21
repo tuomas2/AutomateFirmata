@@ -27,7 +27,7 @@
 
 static const int HOME_ID = 0x01; // Set this different to your neighbors 
 static const int DEVICE_ID = 0x01; // Set this individual within your home
-static const int HEADER_LENGTH = 3;
+static const int HEADER_LENGTH = 4;
 
 
 #include <VirtualWire.h>
@@ -768,34 +768,38 @@ inline void checkVirtualWire()
     if (buflen < HEADER_LENGTH) return; // our headers
     
     int home_address = buf[0];
-    int device_address = buf[1];
-    int command = buf[2];
+    int sender_address = buf[1];
+    int recipient_address = buf[2];
+    int command = buf[3];
+
+    uint8_t *arg1 = &buf[4];
+    uint8_t *arg2 = &buf[5];
 
     // check correct address and ignore if not ours
-    if (home_address != HOME_ID || device_address != DEVICE_ID) return;
+    if (home_address != HOME_ID || recipient_address != DEVICE_ID) return;
     
     switch(command) {
       case SET_PIN_MODE:
-        setPinModeCallback(buf[3], buf[4]);
+        setPinModeCallback(*arg1, *arg2);
         break;
       case ANALOG_MESSAGE:
-        analogWriteCallback(buf[3], buf[4]);
+        analogWriteCallback(*arg1, *arg2);
         break;
       case DIGITAL_MESSAGE:
-        digitalWriteCallback(buf[3], buf[4]);
+        digitalWriteCallback(*arg1, *arg2);
         break;
       case START_SYSEX:
-        sysexCallback(buf[3], buflen-HEADER_LENGTH-1, &buf[4]);
+        sysexCallback(arg1, buflen-HEADER_LENGTH-1, arg2);
         break;
       case SET_DIGITAL_PIN_VALUE:
-        setPinValueCallback(buf[3], buf[4]);
+        setPinValueCallback(*arg1, *arg2);
         break;
       case CUSTOM_MESSAGE:
         Firmata.write(START_SYSEX);
         Firmata.write(SYSEX_DIGITAL_PULSE);
-        for(int i=0; i < buflen; i++)
+        for(int i=0; i < buflen - HEADER_LENGTH; i++)
         {
-            Firmata.write(buf[i]);
+            Firmata.write(arg1[i]);
         }
         Firmata.write(END_SYSEX);
         break;
