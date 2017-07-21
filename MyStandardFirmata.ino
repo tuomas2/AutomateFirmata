@@ -25,9 +25,9 @@
 
 // Device specific configuraiton
 
-static const int HOME_ID = 0x01; // Set this different to your neighbors 
-static const int DEVICE_ID = 0x01; // Set this individual within your home
-static const int HEADER_LENGTH = 4;
+static const uint8_t HOME_ID = 0x01; // Set this different to your neighbors 
+static const uint8_t DEVICE_ID = 0x01; // Set this individual within your home
+static const uint8_t HEADER_LENGTH = 4;
 
 
 #include <VirtualWire.h>
@@ -59,7 +59,14 @@ static const int PIN_MODE_VIRTUALWIRE_READ = 0x0D;
 static const int SYSEX_VIRTUALWRITE_MESSAGE = 0x80;
 static const int SYSEX_DIGITAL_PULSE = 0x91;
 
+// Custom message command bytes
 static const int CUSTOM_MESSAGE = 0xF1;
+static const int SET_VIRTUAL_PIN_VALUE = 0xF2;
+
+// Our custom command ids that are sent via serial to host.
+//static const int CMD_CUSTOM_MESSAGE = 0x01;
+//static const int CMD_VIRTUAL_PIN = 0x02;
+
 
 #ifdef FIRMATA_SERIAL_FEATURE
 SerialFirmata serialFeature;
@@ -765,16 +772,16 @@ inline void checkVirtualWire()
   uint8_t buflen = VW_MAX_MESSAGE_LEN;
   if (vw_get_message(buf, &buflen))
   {
-    if (buflen < HEADER_LENGTH) return; // our headers
+    if (buflen < HEADER_LENGTH + 1) return; // our headers and at least 1 bytes of data
     
-    int home_address = buf[0];
-    int sender_address = buf[1];
-    int recipient_address = buf[2];
-    int command = buf[3];
+    uint8_t home_address = buf[0];
+    uint8_t sender_address = buf[1];
+    uint8_t recipient_address = buf[2];
+    uint8_t command = buf[3];
 
     uint8_t *arg1 = &buf[4];
     uint8_t *arg2 = &buf[5];
-
+    
     // check correct address and ignore if not ours
     if (home_address != HOME_ID || recipient_address != DEVICE_ID) return;
     
@@ -789,18 +796,20 @@ inline void checkVirtualWire()
         digitalWriteCallback(*arg1, *arg2);
         break;
       case START_SYSEX:
-        sysexCallback(arg1, buflen-HEADER_LENGTH-1, arg2);
+        sysexCallback(arg1, buflen - HEADER_LENGTH - 1, arg2);
         break;
       case SET_DIGITAL_PIN_VALUE:
         setPinValueCallback(*arg1, *arg2);
         break;
+      case SET_VIRTUAL_PIN_VALUE:
       case CUSTOM_MESSAGE:
         Firmata.write(START_SYSEX);
         Firmata.write(SYSEX_DIGITAL_PULSE);
+        Firmata.write(command);
+        
         for(int i=0; i < buflen - HEADER_LENGTH; i++)
-        {
             Firmata.write(arg1[i]);
-        }
+        
         Firmata.write(END_SYSEX);
         break;
       }
