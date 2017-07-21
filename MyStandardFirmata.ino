@@ -23,6 +23,13 @@
   Last updated October 16th, 2016
 */
 
+// Device specific configuraiton
+
+static const int HOME_ID = 0x01; // Set this different to your neighbors 
+static const int DEVICE_ID = 0x01; // Set this individual within your home
+static const int HEADER_LENGTH = 3;
+
+
 #include <VirtualWire.h>
 #include <Wire.h>
 #include <Firmata.h>
@@ -51,6 +58,8 @@ static const int PIN_MODE_VIRTUALWIRE_WRITE = 0x0C;
 static const int PIN_MODE_VIRTUALWIRE_READ = 0x0D;
 static const int SYSEX_VIRTUALWRITE_MESSAGE = 0x80;
 static const int SYSEX_DIGITAL_PULSE = 0x91;
+
+static const int CUSTOM_MESSAGE = 0xF1;
 
 #ifdef FIRMATA_SERIAL_FEATURE
 SerialFirmata serialFeature;
@@ -750,6 +759,50 @@ void systemResetCallback()
   isResetting = false;
 }
 
+inline void checkVirtualWire()
+{
+  uint8_t buf[VW_MAX_MESSAGE_LEN];
+  uint8_t buflen = VW_MAX_MESSAGE_LEN;
+  if (vw_get_message(buf, &buflen))
+  {
+    if (buflen < HEADER_LENGTH) return; // our headers
+    
+    int home_address = buf[0];
+    int device_address = buf[1];
+    int command = buf[2];
+
+    // check correct address and ignore if not ours
+    if (home_address != HOME_ID || device_address != DEVICE_ID) return;
+    
+    switch(command) {
+      case SET_PIN_MODE:
+        setPinModeCallback(buf[3], buf[4]);
+        break;
+      case ANALOG_MESSAGE:
+        analogWriteCallback(buf[3], buf[4]);
+        break;
+      case DIGITAL_MESSAGE:
+        digitalWriteCallback(buf[3], buf[4]);
+        break;
+      case START_SYSEX:
+        sysexCallback(buf[3], buflen-HEADER_LENGTH-1, &buf[4]);
+        break;
+      case SET_DIGITAL_PIN_VALUE:
+        setPinValueCallback(buf[3], buf[4]);
+        break;
+      case CUSTOM_MESSAGE:
+        Firmata.write(START_SYSEX);
+        Firmata.write(SYSEX_DIGITAL_PULSE);
+        for(int i=0; i < buflen; i++)
+        {
+            Firmata.write(buf[i]);
+        }
+        Firmata.write(END_SYSEX);
+        break;
+      }
+    }
+}
+
 void setup()
 {
   Firmata.setFirmwareVersion(FIRMATA_FIRMWARE_MAJOR_VERSION, FIRMATA_FIRMWARE_MINOR_VERSION);
@@ -782,8 +835,6 @@ void setup()
  *============================================================================*/
 void loop()
 {
-  uint8_t buf[VW_MAX_MESSAGE_LEN];
-  uint8_t buflen = VW_MAX_MESSAGE_LEN;
    
   byte pin, analogPin;
 
@@ -817,17 +868,7 @@ void loop()
       }
     }
   }
-  
-  if (vw_get_message(buf, &buflen))
-  {
-    Firmata.write(START_SYSEX);
-    Firmata.write(SYSEX_DIGITAL_PULSE);
-    for(int i=0; i < buflen; i++)
-    {
-        Firmata.write(buf[i]);
-    }
-    Firmata.write(END_SYSEX);
-  }
+  checkVirtualWire(); 
 #ifdef FIRMATA_SERIAL_FEATURE
   serialFeature.update();
 #endif
