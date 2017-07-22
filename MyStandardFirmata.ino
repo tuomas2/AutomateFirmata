@@ -25,14 +25,12 @@
 
 // Device specific configuraiton
 
-static const uint8_t HOME_ID = 0x01; // Set this different to your neighbors 
-static const uint8_t DEVICE_ID = 0x01; // Set this individual within your home
-static const uint8_t HEADER_LENGTH = 4;
 
 
 #include <VirtualWire.h>
 #include <Wire.h>
 #include <Firmata.h>
+#include <EEPROM.h>
 
 #define I2C_WRITE                   B00000000
 #define I2C_READ                    B00001000
@@ -54,14 +52,26 @@ static const uint8_t HEADER_LENGTH = 4;
  * GLOBAL VARIABLES
  *============================================================================*/
 
+int home_id = 0x01; // Set this different to your neighbors 
+int device_id = 0x01; // Set this individual within your home
+static const uint8_t HEADER_LENGTH = 4;
+
 static const int PIN_MODE_VIRTUALWIRE_WRITE = 0x0C;
 static const int PIN_MODE_VIRTUALWIRE_READ = 0x0D;
-static const int SYSEX_VIRTUALWRITE_MESSAGE = 0x80;
+// Outgoing sysex's
 static const int SYSEX_DIGITAL_PULSE = 0x91;
+
+// Incoming sysexs (0x00-0x0F are user defined according to FirmataConstants.h, let's use those)
+static const int SYSEX_VIRTUALWIRE_MESSAGE = 0x01;
+static const int SYSEX_SET_IDENTIFICATION = 0x02;
 
 // Custom message command bytes
 static const int CUSTOM_MESSAGE = 0xF1;
 static const int SET_VIRTUAL_PIN_VALUE = 0xF2;
+
+// EEPROM addressses
+static const int EEPROM_HOME_ID_ADR = 0;
+static const int EEPROM_DEVICE_ID_ADR = 1;
 
 // Our custom command ids that are sent via serial to host.
 //static const int CMD_CUSTOM_MESSAGE = 0x01;
@@ -521,8 +531,14 @@ void sysexCallback(byte command, byte argc, byte *argv)
   unsigned int delayTime;
 
   switch (command) {
-    case SYSEX_VIRTUALWRITE_MESSAGE:
+    case SYSEX_VIRTUALWIRE_MESSAGE:
         vw_send(argv, argc);
+        break;
+    case SYSEX_SET_IDENTIFICATION:
+        home_id = argv[0];
+        device_id = argv[1];
+        EEPROM.write(EEPROM_HOME_ID_ADR, home_id);
+        EEPROM.write(EEPROM_DEVICE_ID_ADR, device_id);
         break;
     case I2C_REQUEST:
       mode = argv[1] & I2C_READ_WRITE_MODE_MASK;
@@ -783,7 +799,7 @@ inline void checkVirtualWire()
     uint8_t *arg2 = &buf[5];
     
     // check correct address and ignore if not ours
-    if (home_address != HOME_ID || recipient_address != DEVICE_ID) return;
+    if (home_address != home_id || recipient_address != device_id) return;
     
     switch(command) {
       case SET_PIN_MODE:
@@ -818,6 +834,9 @@ inline void checkVirtualWire()
 
 void setup()
 {
+  home_id = EEPROM.read(EEPROM_HOME_ID_ADR);
+  device_id = EEPROM.read(EEPROM_DEVICE_ID_ADR);
+
   Firmata.setFirmwareVersion(FIRMATA_FIRMWARE_MAJOR_VERSION, FIRMATA_FIRMWARE_MINOR_VERSION);
 
   Firmata.attach(ANALOG_MESSAGE, analogWriteCallback);
@@ -828,7 +847,7 @@ void setup()
   Firmata.attach(SET_DIGITAL_PIN_VALUE, setPinValueCallback);
   Firmata.attach(START_SYSEX, sysexCallback);
   Firmata.attach(SYSTEM_RESET, systemResetCallback);
-
+  
   // to use a port other than Serial, such as Serial1 on an Arduino Leonardo or Mega,
   // Call begin(baud) on the alternate serial port and pass it to Firmata to begin like this:
   // Serial1.begin(57600);
