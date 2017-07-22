@@ -74,9 +74,16 @@ static const int SYSEX_SET_IDENTIFICATION = 0x02;
 static const int SYSEX_VIRTUALWIRE_SUBSCRIBE_PIN = 0x03;
 static const int SYSEX_VIRTUALWIRE_RESET_SUBSCRIPTIONS = 0x04;
 
-// Custom message command bytes
-static const int CUSTOM_MESSAGE = 0xF1;
-static const int SET_VIRTUAL_PIN_VALUE = 0xF2;
+// Virtualwire command bytes
+static const int VIRTUALWIRE_SET_PIN_MODE = 0x01;
+static const int VIRTUALWIRE_ANALOG_MESSAGE = 0x02;
+static const int VIRTUALWIRE_DIGITAL_MESSAGE = 0x03;
+static const int VIRTUALWIRE_START_SYSEX = 0x04;
+static const int VIRTUALWIRE_SET_DIGITAL_PIN_VALUE = 0x05;
+static const int VIRTUALWIRE_SET_VIRTUAL_PIN_VALUE = 0x06;
+static const int VIRTUALWIRE_CUSTOM_MESSAGE = 0x07;
+static const int VIRTUALWIRE_SUBSCRIBE_PIN = 0x08;
+static const int VIRTUALWIRE_RESET_SUBSCRIPTIONS = 0x09;
 
 // EEPROM addressses
 static const int EEPROM_HOME_ID_ADR = 0;
@@ -549,6 +556,16 @@ void saveSubscriptionsToEeprom()
     }
 }
 
+void subscribePin(byte pin_nr, byte device)
+{
+   if(subscription_count > MAX_SUBSCRIPTIONS)
+       return;
+   subscription_pin[subscription_count] = pin_nr;
+   subscription_device[subscription_count] = device;
+   subscription_count++;
+   saveSubscriptionsToEeprom();
+}
+
 void sysexCallback(byte command, byte argc, byte *argv)
 {
   byte mode;
@@ -569,16 +586,7 @@ void sysexCallback(byte command, byte argc, byte *argv)
         EEPROM.update(EEPROM_DEVICE_ID_ADR, device_id);
         break;
     case SYSEX_VIRTUALWIRE_SUBSCRIBE_PIN:
-        if(subscription_count > MAX_SUBSCRIPTIONS)
-            break;
-        byte pin_nr;
-        byte device;
-        pin_nr = argv[0];
-        device = argv[1];
-        subscription_pin[subscription_count] = pin_nr;
-        subscription_device[subscription_count] = device;
-        subscription_count++;
-        saveSubscriptionsToEeprom();
+        subscribePin(argv[0], argv[1]);
         break;
     case SYSEX_VIRTUALWIRE_RESET_SUBSCRIPTIONS:
         subscription_count = 0;
@@ -847,23 +855,23 @@ inline void readVirtualWire()
     if (home_address != home_id || recipient_address != device_id) return;
     
     switch(command) {
-      case SET_PIN_MODE:
+      case VIRTUALWIRE_SET_PIN_MODE:
         setPinModeCallback(*arg1, *arg2);
         break;
-      case ANALOG_MESSAGE:
+      case VIRTUALWIRE_ANALOG_MESSAGE:
         analogWriteCallback(*arg1, *arg2);
         break;
-      case DIGITAL_MESSAGE:
+      case VIRTUALWIRE_DIGITAL_MESSAGE:
         digitalWriteCallback(*arg1, *arg2);
         break;
-      case START_SYSEX:
+      case VIRTUALWIRE_START_SYSEX:
         sysexCallback(arg1, buflen - HEADER_LENGTH - 1, arg2);
         break;
-      case SET_DIGITAL_PIN_VALUE:
+      case VIRTUALWIRE_SET_DIGITAL_PIN_VALUE:
         setPinValueCallback(*arg1, *arg2);
         break;
-      case SET_VIRTUAL_PIN_VALUE:
-      case CUSTOM_MESSAGE:
+      case VIRTUALWIRE_SET_VIRTUAL_PIN_VALUE:
+      case VIRTUALWIRE_CUSTOM_MESSAGE:
         Firmata.write(START_SYSEX);
         Firmata.write(SYSEX_DIGITAL_PULSE);
         Firmata.write(command);
@@ -872,6 +880,13 @@ inline void readVirtualWire()
             Firmata.write(arg1[i]);
         
         Firmata.write(END_SYSEX);
+        break;
+      case VIRTUALWIRE_SUBSCRIBE_PIN:
+        subscribePin(*arg1, *arg2);
+        break;
+      case VIRTUALWIRE_RESET_SUBSCRIPTIONS:
+        subscription_count = 0;
+        saveSubscriptionsToEeprom();
         break;
       }
     }
