@@ -55,6 +55,12 @@
 int home_id = 0x01; // Set this different to your neighbors 
 int device_id = 0x01; // Set this individual within your home
 
+#define MAX_SUBSCRIPTIONS 16
+
+byte subscription_pin[MAX_SUBSCRIPTIONS];
+byte subscription_device[MAX_SUBSCRIPTIONS];
+uint8_t subscription_count = 0;
+
 static const uint8_t HEADER_LENGTH = 4;
 
 static const int PIN_MODE_VIRTUALWIRE_WRITE = 0x0C;
@@ -65,6 +71,8 @@ static const int SYSEX_DIGITAL_PULSE = 0x91;
 // Incoming sysexs (0x00-0x0F are user defined according to FirmataConstants.h, let's use those)
 static const int SYSEX_VIRTUALWIRE_MESSAGE = 0x01;
 static const int SYSEX_SET_IDENTIFICATION = 0x02;
+static const int SYSEX_VIRTUALWIRE_SUBSCRIBE_PIN = 0x03;
+static const int SYSEX_VIRTUALWIRE_RESET_SUBSCRIPTIONS = 0x04;
 
 // Custom message command bytes
 static const int CUSTOM_MESSAGE = 0xF1;
@@ -75,6 +83,11 @@ static const int EEPROM_HOME_ID_ADR = 0;
 static const int EEPROM_DEVICE_ID_ADR = 1;
 static const int EEPROM_VIRTUALWIRE_RX_PIN_ADR = 2;
 static const int EEPROM_VIRTUALWIRE_TX_PIN_ADR = 3;
+static const int EEPROM_SUBSCRIPTION_COUNT_ADR = 4;
+static const int EEPROM_SUBSCRIPTION_PIN_ADR = 5;
+static const int EEPROM_SUBSCRIPTION_DEVICE_ADR = 5 + MAX_SUBSCRIPTIONS;
+
+
 
 // Our custom command ids that are sent via serial to host.
 //static const int CMD_CUSTOM_MESSAGE = 0x01;
@@ -392,14 +405,14 @@ void setPinModeCallback(byte pin, int mode)
       break;
     case PIN_MODE_VIRTUALWIRE_WRITE:
         if (IS_PIN_DIGITAL(pin)) {
-            EEPROM.write(EEPROM_VIRTUALWIRE_TX_PIN_ADR, pin);
+            EEPROM.update(EEPROM_VIRTUALWIRE_TX_PIN_ADR, pin);
             vw_set_tx_pin(pin);
             vw_setup(2000);
         }
         break;
     case PIN_MODE_VIRTUALWIRE_READ:
         if (IS_PIN_DIGITAL(pin)) {
-            EEPROM.write(EEPROM_VIRTUALWIRE_RX_PIN_ADR, pin);
+            EEPROM.update(EEPROM_VIRTUALWIRE_RX_PIN_ADR, pin);
             vw_set_rx_pin(pin);
             vw_setup(2000);
             vw_rx_start();
@@ -526,6 +539,16 @@ void reportDigitalCallback(byte port, int value)
  * SYSEX-BASED commands
  *============================================================================*/
 
+void saveSubscriptionsToEeprom()
+{
+    EEPROM.update(EEPROM_SUBSCRIPTION_COUNT_ADR, subscription_count);
+    for(uint8_t i=0; i<subscription_count; i++)
+    {
+        EEPROM.update(EEPROM_SUBSCRIPTION_PIN_ADR+i, subscription_pin[i]);
+        EEPROM.update(EEPROM_SUBSCRIPTION_DEVICE_ADR+i, subscription_device[i]);
+    }
+}
+
 void sysexCallback(byte command, byte argc, byte *argv)
 {
   byte mode;
@@ -542,8 +565,24 @@ void sysexCallback(byte command, byte argc, byte *argv)
     case SYSEX_SET_IDENTIFICATION:
         home_id = argv[0];
         device_id = argv[1];
-        EEPROM.write(EEPROM_HOME_ID_ADR, home_id);
-        EEPROM.write(EEPROM_DEVICE_ID_ADR, device_id);
+        EEPROM.update(EEPROM_HOME_ID_ADR, home_id);
+        EEPROM.update(EEPROM_DEVICE_ID_ADR, device_id);
+        break;
+    case SYSEX_VIRTUALWIRE_SUBSCRIBE_PIN:
+        if(subscription_count > MAX_SUBSCRIPTIONS)
+            break;
+        byte pin_nr;
+        byte device;
+        pin_nr = argv[0];
+        device = argv[1];
+        subscription_pin[subscription_count] = pin_nr;
+        subscription_device[subscription_count] = device;
+        subscription_count++;
+        saveSubscriptionsToEeprom();
+        break;
+    case SYSEX_VIRTUALWIRE_RESET_SUBSCRIPTIONS:
+        subscription_count = 0;
+        saveSubscriptionsToEeprom();
         break;
     case I2C_REQUEST:
       mode = argv[1] & I2C_READ_WRITE_MODE_MASK;
@@ -788,7 +827,7 @@ void systemResetCallback()
   isResetting = false;
 }
 
-inline void checkVirtualWire()
+inline void readVirtualWire()
 {
   uint8_t buf[VW_MAX_MESSAGE_LEN];
   uint8_t buflen = VW_MAX_MESSAGE_LEN;
@@ -847,11 +886,24 @@ void readEepromConfig()
   int vw_tx_pin = EEPROM.read(EEPROM_VIRTUALWIRE_TX_PIN_ADR);
   setPinModeCallback(vw_rx_pin, PIN_MODE_VIRTUALWIRE_READ);
   setPinModeCallback(vw_tx_pin, PIN_MODE_VIRTUALWIRE_WRITE);
+
+  subscription_count = EEPROM.read(EEPROM_SUBSCRIPTION_COUNT_ADR);
+  for(uint8_t i=0; i<subscription_count; i++)
+  {
+      subscription_pin[i] = EEPROM.read(EEPROM_SUBSCRIPTION_PIN_ADR+i);
+      subscription_device[i] = EEPROM.read(EEPROM_SUBSCRIPTION_DEVICE_ADR+i);
+  }
 }
+
 
 void setup()
 {
-
+  for(uint8_t i=0; i<MAX_SUBSCRIPTIONS; i++)
+  {
+    subscription_pin[i] = 0;
+    subscription_device[i] = 0;
+  } 
+  
   Firmata.setFirmwareVersion(FIRMATA_FIRMWARE_MAJOR_VERSION, FIRMATA_FIRMWARE_MINOR_VERSION);
 
   Firmata.attach(ANALOG_MESSAGE, analogWriteCallback);
@@ -915,7 +967,7 @@ void loop()
       }
     }
   }
-  checkVirtualWire(); 
+  readVirtualWire(); 
 #ifdef FIRMATA_SERIAL_FEATURE
   serialFeature.update();
 #endif
