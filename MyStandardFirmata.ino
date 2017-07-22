@@ -54,6 +54,7 @@
 
 int home_id = 0x01; // Set this different to your neighbors 
 int device_id = 0x01; // Set this individual within your home
+
 static const uint8_t HEADER_LENGTH = 4;
 
 static const int PIN_MODE_VIRTUALWIRE_WRITE = 0x0C;
@@ -72,6 +73,8 @@ static const int SET_VIRTUAL_PIN_VALUE = 0xF2;
 // EEPROM addressses
 static const int EEPROM_HOME_ID_ADR = 0;
 static const int EEPROM_DEVICE_ID_ADR = 1;
+static const int EEPROM_VIRTUALWIRE_RX_PIN_ADR = 2;
+static const int EEPROM_VIRTUALWIRE_TX_PIN_ADR = 3;
 
 // Our custom command ids that are sent via serial to host.
 //static const int CMD_CUSTOM_MESSAGE = 0x01;
@@ -389,12 +392,14 @@ void setPinModeCallback(byte pin, int mode)
       break;
     case PIN_MODE_VIRTUALWIRE_WRITE:
         if (IS_PIN_DIGITAL(pin)) {
+            EEPROM.write(EEPROM_VIRTUALWIRE_TX_PIN_ADR, pin);
             vw_set_tx_pin(pin);
             vw_setup(2000);
         }
         break;
     case PIN_MODE_VIRTUALWIRE_READ:
         if (IS_PIN_DIGITAL(pin)) {
+            EEPROM.write(EEPROM_VIRTUALWIRE_RX_PIN_ADR, pin);
             vw_set_rx_pin(pin);
             vw_setup(2000);
             vw_rx_start();
@@ -779,6 +784,7 @@ void systemResetCallback()
     outputPort(i, readPort(i, portConfigInputs[i]), true);
   }
   */
+  readEepromConfig();
   isResetting = false;
 }
 
@@ -832,10 +838,19 @@ inline void checkVirtualWire()
     }
 }
 
-void setup()
+void readEepromConfig()
 {
   home_id = EEPROM.read(EEPROM_HOME_ID_ADR);
   device_id = EEPROM.read(EEPROM_DEVICE_ID_ADR);
+  
+  int vw_rx_pin = EEPROM.read(EEPROM_VIRTUALWIRE_RX_PIN_ADR);
+  int vw_tx_pin = EEPROM.read(EEPROM_VIRTUALWIRE_TX_PIN_ADR);
+  setPinModeCallback(vw_rx_pin, PIN_MODE_VIRTUALWIRE_READ);
+  setPinModeCallback(vw_tx_pin, PIN_MODE_VIRTUALWIRE_WRITE);
+}
+
+void setup()
+{
 
   Firmata.setFirmwareVersion(FIRMATA_FIRMWARE_MAJOR_VERSION, FIRMATA_FIRMWARE_MINOR_VERSION);
 
