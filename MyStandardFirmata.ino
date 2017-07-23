@@ -52,11 +52,11 @@
  * GLOBAL VARIABLES
  *============================================================================*/
 
-int home_id = 0x01; // Set this different to your neighbors 
-int device_id = 0x01; // Set this individual within your home
+uint8_t home_id = 0x01; // Set this different to your neighbors 
+uint8_t device_id = 0x01; // Set this individual within your home
 
-int vw_rx_pin = 0; // 0 disabled, otherwise pin number
-int vw_tx_pin = 0;
+uint8_t vw_rx_pin = 0; // 0 disabled, otherwise pin number
+uint8_t vw_tx_pin = 0;
 
 static const int BROADCAST_RECIPIENT = 0xFF;
 
@@ -64,35 +64,37 @@ static const int BROADCAST_RECIPIENT = 0xFF;
 
 static const uint8_t HEADER_LENGTH = 4;
 
-static const int PIN_MODE_VIRTUALWIRE_WRITE = 0x0C;
-static const int PIN_MODE_VIRTUALWIRE_READ = 0x0D;
+static const byte PIN_MODE_VIRTUALWIRE_WRITE = 0x0C;
+static const byte PIN_MODE_VIRTUALWIRE_READ = 0x0D;
 // Outgoing sysex's
 static const int SYSEX_DIGITAL_PULSE = 0x91;
 
 // Incoming sysexs (0x00-0x0F are user defined according to FirmataConstants.h, let's use those)
-static const int SYSEX_VIRTUALWIRE_MESSAGE = 0x01;
-static const int SYSEX_SET_IDENTIFICATION = 0x02;
-static const int SYSEX_VIRTUALWIRE_SUBSCRIBE_PIN = 0x03;
-static const int SYSEX_VIRTUALWIRE_RESET_SUBSCRIPTIONS = 0x04;
+static const byte SYSEX_VIRTUALWIRE_MESSAGE = 0x01;
+static const byte SYSEX_SET_IDENTIFICATION = 0x02;
+static const byte SYSEX_VIRTUALWIRE_SUBSCRIBE_PIN = 0x03;
+static const byte SYSEX_VIRTUALWIRE_RESET_SUBSCRIPTIONS = 0x04;
 
 // Virtualwire command bytes
-static const int VIRTUALWIRE_SET_PIN_MODE = 0x01;
-static const int VIRTUALWIRE_ANALOG_MESSAGE = 0x02;
-static const int VIRTUALWIRE_DIGITAL_MESSAGE = 0x03;
-static const int VIRTUALWIRE_START_SYSEX = 0x04;
-static const int VIRTUALWIRE_SET_DIGITAL_PIN_VALUE = 0x05;
-static const int VIRTUALWIRE_SET_VIRTUAL_PIN_VALUE = 0x06;
-static const int VIRTUALWIRE_CUSTOM_MESSAGE = 0x07;
+static const byte VIRTUALWIRE_SET_PIN_MODE = 0x01;
+static const byte VIRTUALWIRE_ANALOG_MESSAGE = 0x02;
+static const byte VIRTUALWIRE_DIGITAL_MESSAGE = 0x03;
+static const byte VIRTUALWIRE_START_SYSEX = 0x04;
+static const byte VIRTUALWIRE_SET_DIGITAL_PIN_VALUE = 0x05;
+static const byte VIRTUALWIRE_SET_VIRTUAL_PIN_VALUE = 0x06;
+static const byte VIRTUALWIRE_CUSTOM_MESSAGE = 0x07;
 
-static const int VIRTUALWIRE_DIGITAL_BROADCAST = 0x08;
-static const int VIRTUALWIRE_ANALOG_BROADCAST = 0x09;
+static const byte VIRTUALWIRE_DIGITAL_BROADCAST = 0x08;
+static const byte VIRTUALWIRE_ANALOG_BROADCAST = 0x09;
 
 // EEPROM addressses
 static const int EEPROM_HOME_ID_ADR = 0;
 static const int EEPROM_DEVICE_ID_ADR = 1;
 static const int EEPROM_VIRTUALWIRE_RX_PIN_ADR = 2;
 static const int EEPROM_VIRTUALWIRE_TX_PIN_ADR = 3;
-static const int EEPROM_SAMPLING_INTERVAL = 5;
+static const int EEPROM_SAMPLING_INTERVAL = 5; // 2 bytes
+static const int EEPROM_ANALOG_INPUTS_TO_REPORT = 7; // 2 byte
+static const int EEPROM_DIGITAL_INPUTS_TO_REPORT = 50; // size required: TOTAL_PORTS x 1 byte
 
 
 // Our custom command ids that are sent via serial to host.
@@ -556,7 +558,7 @@ void reportAnalogCallback(byte analogPin, int value)
       }
     }
   }
-  // TODO: save status to EEPROM here, if changed
+  EEPROM.put(EEPROM_ANALOG_INPUTS_TO_REPORT, analogInputsToReport);
 }
 
 void reportDigitalCallback(byte port, int value)
@@ -574,6 +576,7 @@ void reportDigitalCallback(byte port, int value)
   // as analog when sampling the analog inputs.  Likewise, while
   // scanning digital pins, portConfigInputs will mask off values from any
   // pins configured as analog
+  EEPROM.update(EEPROM_DIGITAL_INPUTS_TO_REPORT + port, reportPINs[port]);
 }
 
 /*==============================================================================
@@ -713,7 +716,7 @@ void sysexCallback(byte command, byte argc, byte *argv)
         samplingInterval = argv[0] + (argv[1] << 7);
         if (samplingInterval < MINIMUM_SAMPLING_INTERVAL) {
           samplingInterval = MINIMUM_SAMPLING_INTERVAL;
-          EEPROM.update(EEPROM_SAMPLING_INTERVAL, samplingInterval);
+          EEPROM.put(EEPROM_SAMPLING_INTERVAL, samplingInterval);
         }
       } else {
         //Firmata.sendString("Not enough data");
@@ -794,7 +797,7 @@ void sysexCallback(byte command, byte argc, byte *argv)
  * SETUP()
  *============================================================================*/
 
-void systemResetCallback()
+void systemResetCallbackFunc(bool init_phase)
 {
   isResetting = true;
 
@@ -839,8 +842,20 @@ void systemResetCallback()
     outputPort(i, readPort(i, portConfigInputs[i]), true);
   }
   */
-  readEepromConfig();
+  readEepromConfig(init_phase);
+  if(!init_phase)
+  {
+    EEPROM.put(EEPROM_ANALOG_INPUTS_TO_REPORT, (int)0);
+    for(int i=0; i<TOTAL_PORTS; i++)
+        EEPROM.update(EEPROM_DIGITAL_INPUTS_TO_REPORT + i, (byte)0);
+
+  } 
   isResetting = false;
+}
+
+void systemResetCallback()
+{
+    systemResetCallbackFunc(false);
 }
 
 void blink()
@@ -904,11 +919,11 @@ inline void readVirtualWire()
     }
 }
 
-void readEepromConfig()
+void readEepromConfig(bool init_phase)
 {
   home_id = EEPROM.read(EEPROM_HOME_ID_ADR);
   device_id = EEPROM.read(EEPROM_DEVICE_ID_ADR);
-  samplingInterval = EEPROM.read(EEPROM_SAMPLING_INTERVAL);
+  EEPROM.get(EEPROM_SAMPLING_INTERVAL, samplingInterval);
   
   vw_rx_pin = EEPROM.read(EEPROM_VIRTUALWIRE_RX_PIN_ADR);
   vw_tx_pin = EEPROM.read(EEPROM_VIRTUALWIRE_TX_PIN_ADR);
@@ -918,6 +933,13 @@ void readEepromConfig()
   
   if(vw_tx_pin)
     setPinModeCallback(vw_tx_pin, PIN_MODE_VIRTUALWIRE_WRITE);
+
+  if(init_phase)
+  {
+      EEPROM.get(EEPROM_ANALOG_INPUTS_TO_REPORT, analogInputsToReport);
+      for(int i=0; i<TOTAL_PORTS; i++)
+        reportPINs[i] = EEPROM.read(EEPROM_DIGITAL_INPUTS_TO_REPORT + i);
+  }
 }
 
 
@@ -945,7 +967,7 @@ void setup()
     ; // wait for serial port to connect. Needed for ATmega32u4-based boards and Arduino 101
   }
 
-  systemResetCallback();  // reset to default config
+  systemResetCallbackFunc(true);  // reset to default config
 }
 
 /*==============================================================================
