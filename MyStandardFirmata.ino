@@ -866,11 +866,9 @@ inline void readVirtualWire()
 
     uint8_t *arg1 = &buf[4];
     uint8_t *arg2 = &buf[5];
-    blink();
     // check correct address and ignore if not ours
     if (home_address == home_id && (recipient_address == device_id || recipient_address == BROADCAST_RECIPIENT))
     {
-      blink();
       switch(command) {
         case VIRTUALWIRE_SET_PIN_MODE:
           setPinModeCallback(*arg1, *arg2);
