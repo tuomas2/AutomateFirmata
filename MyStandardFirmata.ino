@@ -51,6 +51,7 @@
 /*==============================================================================
  * GLOBAL VARIABLES
  *============================================================================*/
+char tmpbuf[128];
 
 uint8_t home_id = 0x01; // Set this different to your neighbors 
 uint8_t device_id = 0x01; // Set this individual within your home
@@ -94,7 +95,9 @@ static const int EEPROM_VIRTUALWIRE_RX_PIN_ADR = 2;
 static const int EEPROM_VIRTUALWIRE_TX_PIN_ADR = 3;
 static const int EEPROM_SAMPLING_INTERVAL = 5; // 2 bytes
 static const int EEPROM_ANALOG_INPUTS_TO_REPORT = 7; // 2 byte
-static const int EEPROM_DIGITAL_INPUTS_TO_REPORT = 50; // size required: TOTAL_PORTS x 1 byte
+static const int EEPROM_DIGITAL_INPUTS_TO_REPORT = 10; // size required: TOTAL_PORTS x 1 byte
+static const int EEPROM_PORT_CONFIG_INPUTS = 30; // size required: TOTAL_PORTS x 1 byte
+static const int EEPROM_PORT_CONFIG_PULL_UPS = 50; // size required: TOTAL_PORTS x 1 byte
 
 
 // Our custom command ids that are sent via serial to host.
@@ -110,11 +113,12 @@ SerialFirmata serialFeature;
 int analogInputsToReport = 0; // bitwise array to store pin reporting
 
 /* digital input ports */
-byte reportPINs[TOTAL_PORTS];       // 1 = report this port, 0 = silence. 1 port == 8 pins.
+boolean reportPINs[TOTAL_PORTS];       // 1 = report this port, 0 = silence. 1 port == 8 pins.
 byte previousPINs[TOTAL_PORTS];     // previous 8 bits sent
 
 /* pins configuration */
-byte portConfigInputs[TOTAL_PORTS]; // each bit: 1 = pin in INPUT, 0 = anything else
+byte portConfigInputs[TOTAL_PORTS];  // each bit: 1 = pin in (any) INPUT, 0 = anything else
+byte portConfigPullUps[TOTAL_PORTS]; // each bit: 1 = pin in PULL_UP, 0 = anything else
 
 /* timer variables */
 unsigned long currentMillis;        // store the current value from millis()
@@ -384,6 +388,19 @@ void setPinModeCallback(byte pin, int mode)
     } else {
       portConfigInputs[pin / 8] &= ~(1 << (pin & 7));
     }
+    if (mode == PIN_MODE_PULLUP) {
+      portConfigPullUps[pin / 8] |= (1 << (pin & 7));
+    }
+    else
+    {
+      portConfigPullUps[pin / 8] &= ~(1 << (pin & 7));
+    }
+
+    if(!isResetting)
+    {
+      EEPROM.update(EEPROM_PORT_CONFIG_INPUTS + pin/8, portConfigInputs[pin/8]);
+      EEPROM.update(EEPROM_PORT_CONFIG_PULL_UPS + pin/8, portConfigPullUps[pin/8]);
+    }
   }
   Firmata.setPinState(pin, 0);
   switch (mode) {
@@ -557,26 +574,30 @@ void reportAnalogCallback(byte analogPin, int value)
         Firmata.sendAnalog(analogPin, analogRead(analogPin));
       }
     }
+    if(!isResetting)
+      EEPROM.put(EEPROM_ANALOG_INPUTS_TO_REPORT, analogInputsToReport);
   }
-  EEPROM.put(EEPROM_ANALOG_INPUTS_TO_REPORT, analogInputsToReport);
 }
 
 void reportDigitalCallback(byte port, int value)
 {
   if (port < TOTAL_PORTS) {
-    reportPINs[port] = (byte)value;
+    reportPINs[port] = value;
     // Send port value immediately. This is helpful when connected via
     // ethernet, wi-fi or bluetooth so pin states can be known upon
     // reconnecting.
     if (value) outputPort(port, readPort(port, portConfigInputs[port]), true);
-  }
+    if(!isResetting)
+    {
+      EEPROM.update(EEPROM_DIGITAL_INPUTS_TO_REPORT + port, reportPINs[port]);
+    }
+}
   // do not disable analog reporting on these 8 pins, to allow some
   // pins used for digital, others analog.  Instead, allow both types
   // of reporting to be enabled, but check if the pin is configured
   // as analog when sampling the analog inputs.  Likewise, while
   // scanning digital pins, portConfigInputs will mask off values from any
   // pins configured as analog
-  EEPROM.update(EEPROM_DIGITAL_INPUTS_TO_REPORT + port, reportPINs[port]);
 }
 
 /*==============================================================================
@@ -716,11 +737,11 @@ void sysexCallback(byte command, byte argc, byte *argv)
         samplingInterval = argv[0] + (argv[1] << 7);
         if (samplingInterval < MINIMUM_SAMPLING_INTERVAL) {
           samplingInterval = MINIMUM_SAMPLING_INTERVAL;
-          EEPROM.put(EEPROM_SAMPLING_INTERVAL, samplingInterval);
         }
       } else {
         //Firmata.sendString("Not enough data");
       }
+      EEPROM.put(EEPROM_SAMPLING_INTERVAL, samplingInterval);
       break;
     case EXTENDED_ANALOG:
       if (argc > 1) {
@@ -815,6 +836,7 @@ void systemResetCallbackFunc(bool init_phase)
   for (byte i = 0; i < TOTAL_PORTS; i++) {
     reportPINs[i] = false;    // by default, reporting off
     portConfigInputs[i] = 0;  // until activated
+    portConfigPullUps[i] = 0;  // until activated
     previousPINs[i] = 0;
   }
 
@@ -830,8 +852,8 @@ void systemResetCallbackFunc(bool init_phase)
     }
   }
   // by default, do not report any analog inputs
+  
   analogInputsToReport = 0;
-
 
   /* send digital inputs to set the initial state on the host computer,
    * since once in the loop(), this firmware will only send on change */
@@ -844,11 +866,16 @@ void systemResetCallbackFunc(bool init_phase)
   */
   readEepromConfig(init_phase);
   if(!init_phase)
-  {
+  { 
     EEPROM.put(EEPROM_ANALOG_INPUTS_TO_REPORT, (int)0);
     for(int i=0; i<TOTAL_PORTS; i++)
+    {
         EEPROM.update(EEPROM_DIGITAL_INPUTS_TO_REPORT + i, (byte)0);
+        EEPROM.update(EEPROM_PORT_CONFIG_INPUTS + i, (byte)0);
+        EEPROM.update(EEPROM_PORT_CONFIG_PULL_UPS + i, (byte)0);
+    }
 
+    EEPROM.get(EEPROM_ANALOG_INPUTS_TO_REPORT, analogInputsToReport);
   } 
   isResetting = false;
 }
@@ -918,13 +945,12 @@ inline void readVirtualWire()
       }
     }
 }
-
+    
 void readEepromConfig(bool init_phase)
 {
   home_id = EEPROM.read(EEPROM_HOME_ID_ADR);
   device_id = EEPROM.read(EEPROM_DEVICE_ID_ADR);
   EEPROM.get(EEPROM_SAMPLING_INTERVAL, samplingInterval);
-  
   vw_rx_pin = EEPROM.read(EEPROM_VIRTUALWIRE_RX_PIN_ADR);
   vw_tx_pin = EEPROM.read(EEPROM_VIRTUALWIRE_TX_PIN_ADR);
 
@@ -937,8 +963,30 @@ void readEepromConfig(bool init_phase)
   if(init_phase)
   {
       EEPROM.get(EEPROM_ANALOG_INPUTS_TO_REPORT, analogInputsToReport);
-      for(int i=0; i<TOTAL_PORTS; i++)
-        reportPINs[i] = EEPROM.read(EEPROM_DIGITAL_INPUTS_TO_REPORT + i);
+      for(int input_nr = 0; input_nr < TOTAL_ANALOG_PINS; input_nr ++)
+          if((1 << input_nr) & analogInputsToReport)
+             setPinModeCallback(input_nr, PIN_MODE_ANALOG);
+
+      for(int port=0; port<TOTAL_PORTS; port++)
+      {
+        reportPINs[port] = EEPROM.read(EEPROM_DIGITAL_INPUTS_TO_REPORT + port);
+        portConfigInputs[port] = EEPROM.read(EEPROM_PORT_CONFIG_INPUTS + port);
+        portConfigPullUps[port] = EEPROM.read(EEPROM_PORT_CONFIG_PULL_UPS + port);
+
+        for(uint8_t bit=0; bit<8; bit++)
+            if(portConfigInputs[port] & (1 << bit))
+            {
+                uint8_t pin_nr = 8*port + bit;
+                if(portConfigPullUps[port] & (1 << bit))
+                {
+                    setPinModeCallback(pin_nr, PIN_MODE_PULLUP);
+                }
+                else
+                {
+                    setPinModeCallback(pin_nr, PIN_MODE_INPUT);
+                }
+            }
+      }
   }
 }
 
