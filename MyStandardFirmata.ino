@@ -80,8 +80,8 @@ static const int SYSEX_DIGITAL_PULSE = 0x91;
 // Incoming sysexs (0x00-0x0F are user defined according to FirmataConstants.h, let's use those)
 static const byte SYSEX_VIRTUALWIRE_MESSAGE = 0x01;
 static const byte SYSEX_SET_IDENTIFICATION = 0x02;
-static const byte SYSEX_VIRTUALWIRE_SUBSCRIBE_PIN = 0x03;
-static const byte SYSEX_VIRTUALWIRE_RESET_SUBSCRIPTIONS = 0x04;
+static const byte SYSEX_KEEP_ALIVE = 0x03;
+
 
 // Virtualwire command bytes
 static const byte VIRTUALWIRE_SET_PIN_MODE = 0x01;
@@ -629,6 +629,8 @@ void sysexCallback(byte command, byte argc, byte *argv)
   unsigned int delayTime;
 
   switch (command) {
+    case SYSEX_KEEP_ALIVE:
+        break;
     case SYSEX_VIRTUALWIRE_MESSAGE:
         blink();
         vw_send(argv, argc);
