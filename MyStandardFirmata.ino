@@ -28,7 +28,6 @@
 
 // TODOes:
 // - make sure even digital messages are not sent more than sampling rate allows via VirtualWire.
-// - enable high frequency PWM on timer2
 
 #include <VirtualWire.h>
 #include <Wire.h>
@@ -207,9 +206,8 @@ byte wireRead(void)
  * 
  * Note that this function will have side effects on anything else
  * that uses timers:
- *   - Changes on pins 3, 5, 6, or 11 may cause the delay() and
- *     millis() functions to stop working. Other timing-related
- *     functions may also be affected.
+ *   - Changes on pins 5, 6 cause the delay() and millis() functions to stop working. 
+ *     Other timing-related functions may also be affected.
  *   - Changes on pins 9 or 10 will cause the Servo library to function
  *     incorrectly.
  * 
@@ -460,7 +458,7 @@ void setPinModeCallback(byte pin, int mode)
       break;
     case PIN_MODE_PWM:
       if (IS_PIN_PWM(pin)) {
-        if(pin==9 || pin==10)
+        if(pin==3 || pin==11)
             setPwmFrequency(pin, 1);
         pinMode(PIN_TO_PWM(pin), OUTPUT);
         analogWrite(PIN_TO_PWM(pin), 0);
