@@ -30,7 +30,15 @@
   See file LICENSE.txt for further informations on licensing terms.
 
   Last updated October 16th, 2016
+
+TODO
+
+- Receiver stops sending updates via serial at some point. 
+
 */
+
+
+
 
 // Device specific configuraiton
 
@@ -571,6 +579,7 @@ void digitalWriteCallback(byte port, int value)
 //}
 void reportAnalogCallback(byte analogPin, int value)
 {
+  int analogData;
   if (analogPin < TOTAL_ANALOG_PINS) {
     if (value == 0) {
       analogInputsToReport = analogInputsToReport & ~ (1 << analogPin);
@@ -582,7 +591,10 @@ void reportAnalogCallback(byte analogPin, int value)
         // Send pin value immediately. This is helpful when connected via
         // ethernet, wi-fi or bluetooth so pin states can be known upon
         // reconnecting.
-        Firmata.sendAnalog(analogPin, analogRead(analogPin));
+        analogData = analogRead(analogPin);
+        if(serial_enabled)
+            Firmata.sendAnalog(analogPin, analogData);
+        sendVirtualWireAnalogOutput(analogPin, analogData);
       }
     }
     if(!isResetting)
@@ -599,9 +611,7 @@ void reportDigitalCallback(byte port, int value)
     // reconnecting.
     if (value) outputPort(port, readPort(port, portConfigInputs[port]), true);
     if(!isResetting)
-    {
       EEPROM.update(EEPROM_DIGITAL_INPUTS_TO_REPORT + port, reportPINs[port]);
-    }
 }
   // do not disable analog reporting on these 8 pins, to allow some
   // pins used for digital, others analog.  Instead, allow both types
@@ -835,7 +845,6 @@ void sysexCallback(byte command, byte argc, byte *argv)
 void systemResetCallbackFunc(bool init_phase)
 {
   isResetting = true;
-
   // initialize a defalt state
   // TODO: option to load config from EEPROM instead of default
 
