@@ -1,4 +1,12 @@
 /*
+
+  AutomateFirmata. Firmata with some additional features for Automate 
+  (https://github.com/tuomas2/automate)
+
+  Repository URL: https://github.com/tuomas2/AutomateFirmata
+
+  Based on StandardFirmata.
+
   Firmata is a generic protocol for communicating with microcontrollers
   from software on a host computer. It is intended to work with
   any host computer software package.
@@ -12,6 +20,7 @@
   Copyright (C) 2010-2011 Paul Stoffregen.  All rights reserved.
   Copyright (C) 2009 Shigeru Kobayashi.  All rights reserved.
   Copyright (C) 2009-2016 Jeff Hoefs.  All rights reserved.
+  Copyright (C) 2017 Tuomas Airaksinen. All rights reserved.
 
   This library is free software; you can redistribute it and/or
   modify it under the terms of the GNU Lesser General Public
@@ -23,9 +32,12 @@
   Last updated October 16th, 2016
 */
 
+// Device specific configuraiton
+
 #include <VirtualWire.h>
 #include <Wire.h>
 #include <Firmata.h>
+#include <EEPROM.h>
 
 #define I2C_WRITE                   B00000000
 #define I2C_READ                    B00001000
@@ -41,16 +53,68 @@
 
 // the minimum interval for sampling analog input
 #define MINIMUM_SAMPLING_INTERVAL   1
-
+#define BLINK_INTERVAL 0
+#define BLINK_PIN 13
+#define SERIAL_SHUTDOWN_TIME 120000 // 2 minutes
 
 /*==============================================================================
  * GLOBAL VARIABLES
  *============================================================================*/
 
-static const int PIN_MODE_VIRTUALWIRE_WRITE = 0x0C;
-static const int PIN_MODE_VIRTUALWIRE_READ = 0x0D;
-static const int SYSEX_VIRTUALWRITE_MESSAGE = 0x80;
+#define VIRTUALWIRE_BAUDRATE 9600
+
+char tmpbuf[128];
+
+uint8_t home_id = 0x01; // Set this different to your neighbors 
+uint8_t device_id = 0x01; // Set this individual within your home
+
+uint8_t vw_rx_pin = 0; // 0 disabled, otherwise pin number
+uint8_t vw_tx_pin = 0;
+
+boolean serial_enabled = true;
+
+static const int BROADCAST_RECIPIENT = 0xFF;
+static const uint8_t HEADER_LENGTH = 4;
+
+static const byte PIN_MODE_VIRTUALWIRE_WRITE = 0x0C;
+static const byte PIN_MODE_VIRTUALWIRE_READ = 0x0D;
+// Outgoing sysex's
 static const int SYSEX_DIGITAL_PULSE = 0x91;
+
+// Incoming sysexs (0x00-0x0F are user defined according to FirmataConstants.h, let's use those)
+static const byte SYSEX_VIRTUALWIRE_MESSAGE = 0x01;
+static const byte SYSEX_SET_IDENTIFICATION = 0x02;
+static const byte SYSEX_KEEP_ALIVE = 0x03;
+
+
+// Virtualwire command bytes
+static const byte VIRTUALWIRE_SET_PIN_MODE = 0x01;
+static const byte VIRTUALWIRE_ANALOG_MESSAGE = 0x02;
+static const byte VIRTUALWIRE_DIGITAL_MESSAGE = 0x03;
+static const byte VIRTUALWIRE_START_SYSEX = 0x04;
+static const byte VIRTUALWIRE_SET_DIGITAL_PIN_VALUE = 0x05;
+static const byte VIRTUALWIRE_SET_VIRTUAL_PIN_VALUE = 0x06;
+static const byte VIRTUALWIRE_CUSTOM_MESSAGE = 0x07;
+
+static const byte VIRTUALWIRE_DIGITAL_BROADCAST = 0x08;
+static const byte VIRTUALWIRE_ANALOG_BROADCAST = 0x09;
+
+// EEPROM addressses
+static const int EEPROM_HOME_ID_ADR = 0;
+static const int EEPROM_DEVICE_ID_ADR = 1;
+static const int EEPROM_VIRTUALWIRE_RX_PIN_ADR = 2;
+static const int EEPROM_VIRTUALWIRE_TX_PIN_ADR = 3;
+static const int EEPROM_SAMPLING_INTERVAL = 5; // 2 bytes
+static const int EEPROM_ANALOG_INPUTS_TO_REPORT = 7; // 2 byte
+static const int EEPROM_DIGITAL_INPUTS_TO_REPORT = 10; // size required: TOTAL_PORTS x 1 byte
+static const int EEPROM_PORT_CONFIG_INPUTS = 30; // size required: TOTAL_PORTS x 1 byte
+static const int EEPROM_PORT_CONFIG_PULL_UPS = 50; // size required: TOTAL_PORTS x 1 byte
+
+
+// Our custom command ids that are sent via serial to host.
+//static const int CMD_CUSTOM_MESSAGE = 0x01;
+//static const int CMD_VIRTUAL_PIN = 0x02;
+
 
 #ifdef FIRMATA_SERIAL_FEATURE
 SerialFirmata serialFeature;
@@ -60,16 +124,22 @@ SerialFirmata serialFeature;
 int analogInputsToReport = 0; // bitwise array to store pin reporting
 
 /* digital input ports */
-byte reportPINs[TOTAL_PORTS];       // 1 = report this port, 0 = silence
+boolean reportPINs[TOTAL_PORTS];       // 1 = report this port, 0 = silence. 1 port == 8 pins.
 byte previousPINs[TOTAL_PORTS];     // previous 8 bits sent
 
 /* pins configuration */
-byte portConfigInputs[TOTAL_PORTS]; // each bit: 1 = pin in INPUT, 0 = anything else
+byte portConfigInputs[TOTAL_PORTS];  // each bit: 1 = pin in (any) INPUT, 0 = anything else
+byte portConfigPullUps[TOTAL_PORTS]; // each bit: 1 = pin in PULL_UP, 0 = anything else
 
 /* timer variables */
 unsigned long currentMillis;        // store the current value from millis()
 unsigned long previousMillis;       // for comparison with currentMillis
+unsigned long lastSerialMillis = 0;       // for comparison with currentMillis
+
 unsigned int samplingInterval = 19; // how often to run the main loop (in ms)
+
+unsigned long blinkMillis=0;       // for comparison with currentMillis
+
 
 /* i2c data */
 struct i2c_device_info {
@@ -141,9 +211,8 @@ byte wireRead(void)
  * 
  * Note that this function will have side effects on anything else
  * that uses timers:
- *   - Changes on pins 3, 5, 6, or 11 may cause the delay() and
- *     millis() functions to stop working. Other timing-related
- *     functions may also be affected.
+ *   - Changes on pins 5, 6 cause the delay() and millis() functions to stop working. 
+ *     Other timing-related functions may also be affected.
  *   - Changes on pins 9 or 10 will cause the Servo library to function
  *     incorrectly.
  * 
@@ -243,14 +312,48 @@ void readAndReportData(byte address, int theRegister, byte numBytes, byte stopTX
   Firmata.sendSysex(SYSEX_I2C_REPLY, numBytes + 2, i2cRxData);
 }
 
+void sendVirtualWireDigitalOutput(byte portNumber, byte portValue)
+{
+   if(!vw_tx_pin)
+      return;
+
+   byte data[6];
+   data[0] = home_id; 
+   data[1] = device_id; // sender
+   data[2] = BROADCAST_RECIPIENT;
+   data[3] = VIRTUALWIRE_DIGITAL_BROADCAST; 
+   data[4] = portNumber;
+   data[5] = portValue;
+   blink();
+   vw_send(data, sizeof(data));
+}
+
+void sendVirtualWireAnalogOutput(byte pinNumber, int analogData)
+{
+   if(!vw_tx_pin)
+      return;
+
+   byte data[6];
+   data[0] = home_id; 
+   data[1] = device_id; // sender
+   data[2] = BROADCAST_RECIPIENT;
+   data[3] = VIRTUALWIRE_ANALOG_BROADCAST; 
+   data[4] = pinNumber;
+   data[5] = analogData;
+   blink();
+   vw_send(data, sizeof(data));  
+}
+
 void outputPort(byte portNumber, byte portValue, byte forceSend)
 {
   // pins not configured as INPUT are cleared to zeros
   portValue = portValue & portConfigInputs[portNumber];
   // only send if the value is different than previously sent
   if (forceSend || previousPINs[portNumber] != portValue) {
-    Firmata.sendDigitalPort(portNumber, portValue);
+    if(serial_enabled)
+        Firmata.sendDigitalPort(portNumber, portValue);
     previousPINs[portNumber] = portValue;
+    sendVirtualWireDigitalOutput(portNumber, portValue);
   }
 }
 
@@ -303,6 +406,19 @@ void setPinModeCallback(byte pin, int mode)
     } else {
       portConfigInputs[pin / 8] &= ~(1 << (pin & 7));
     }
+    if (mode == PIN_MODE_PULLUP) {
+      portConfigPullUps[pin / 8] |= (1 << (pin & 7));
+    }
+    else
+    {
+      portConfigPullUps[pin / 8] &= ~(1 << (pin & 7));
+    }
+
+    if(!isResetting)
+    {
+      EEPROM.update(EEPROM_PORT_CONFIG_INPUTS + pin/8, portConfigInputs[pin/8]);
+      EEPROM.update(EEPROM_PORT_CONFIG_PULL_UPS + pin/8, portConfigPullUps[pin/8]);
+    }
   }
   Firmata.setPinState(pin, 0);
   switch (mode) {
@@ -347,7 +463,7 @@ void setPinModeCallback(byte pin, int mode)
       break;
     case PIN_MODE_PWM:
       if (IS_PIN_PWM(pin)) {
-        if(pin==9 || pin==10)
+        if(pin==3 || pin==11)
             setPwmFrequency(pin, 1);
         pinMode(PIN_TO_PWM(pin), OUTPUT);
         analogWrite(PIN_TO_PWM(pin), 0);
@@ -363,15 +479,21 @@ void setPinModeCallback(byte pin, int mode)
       break;
     case PIN_MODE_VIRTUALWIRE_WRITE:
         if (IS_PIN_DIGITAL(pin)) {
+            vw_tx_stop();
             vw_set_tx_pin(pin);
-            vw_setup(2000);
+            vw_setup(VIRTUALWIRE_BAUDRATE);
+            vw_tx_pin = pin;
+            EEPROM.update(EEPROM_VIRTUALWIRE_TX_PIN_ADR, pin);
         }
         break;
     case PIN_MODE_VIRTUALWIRE_READ:
         if (IS_PIN_DIGITAL(pin)) {
+            vw_rx_stop();
             vw_set_rx_pin(pin);
-            vw_setup(2000);
+            vw_setup(VIRTUALWIRE_BAUDRATE);
             vw_rx_start();
+            vw_rx_pin = pin;
+            EEPROM.update(EEPROM_VIRTUALWIRE_RX_PIN_ADR, pin);
         }
         break;
     case PIN_MODE_SERIAL:
@@ -470,19 +592,24 @@ void reportAnalogCallback(byte analogPin, int value)
         Firmata.sendAnalog(analogPin, analogRead(analogPin));
       }
     }
+    if(!isResetting)
+      EEPROM.put(EEPROM_ANALOG_INPUTS_TO_REPORT, analogInputsToReport);
   }
-  // TODO: save status to EEPROM here, if changed
 }
 
 void reportDigitalCallback(byte port, int value)
 {
   if (port < TOTAL_PORTS) {
-    reportPINs[port] = (byte)value;
+    reportPINs[port] = value;
     // Send port value immediately. This is helpful when connected via
     // ethernet, wi-fi or bluetooth so pin states can be known upon
     // reconnecting.
     if (value) outputPort(port, readPort(port, portConfigInputs[port]), true);
-  }
+    if(!isResetting)
+    {
+      EEPROM.update(EEPROM_DIGITAL_INPUTS_TO_REPORT + port, reportPINs[port]);
+    }
+}
   // do not disable analog reporting on these 8 pins, to allow some
   // pins used for digital, others analog.  Instead, allow both types
   // of reporting to be enabled, but check if the pin is configured
@@ -505,8 +632,17 @@ void sysexCallback(byte command, byte argc, byte *argv)
   unsigned int delayTime;
 
   switch (command) {
-    case SYSEX_VIRTUALWRITE_MESSAGE:
+    case SYSEX_KEEP_ALIVE:
+        break;
+    case SYSEX_VIRTUALWIRE_MESSAGE:
+        blink();
         vw_send(argv, argc);
+        break;
+    case SYSEX_SET_IDENTIFICATION:
+        home_id = argv[0];
+        device_id = argv[1];
+        EEPROM.update(EEPROM_HOME_ID_ADR, home_id);
+        EEPROM.update(EEPROM_DEVICE_ID_ADR, device_id);
         break;
     case I2C_REQUEST:
       mode = argv[1] & I2C_READ_WRITE_MODE_MASK;
@@ -626,6 +762,7 @@ void sysexCallback(byte command, byte argc, byte *argv)
       } else {
         //Firmata.sendString("Not enough data");
       }
+      EEPROM.put(EEPROM_SAMPLING_INTERVAL, samplingInterval);
       break;
     case EXTENDED_ANALOG:
       if (argc > 1) {
@@ -702,7 +839,7 @@ void sysexCallback(byte command, byte argc, byte *argv)
  * SETUP()
  *============================================================================*/
 
-void systemResetCallback()
+void systemResetCallbackFunc(bool init_phase)
 {
   isResetting = true;
 
@@ -720,6 +857,7 @@ void systemResetCallback()
   for (byte i = 0; i < TOTAL_PORTS; i++) {
     reportPINs[i] = false;    // by default, reporting off
     portConfigInputs[i] = 0;  // until activated
+    portConfigPullUps[i] = 0;  // until activated
     previousPINs[i] = 0;
   }
 
@@ -735,8 +873,8 @@ void systemResetCallback()
     }
   }
   // by default, do not report any analog inputs
+  
   analogInputsToReport = 0;
-
 
   /* send digital inputs to set the initial state on the host computer,
    * since once in the loop(), this firmware will only send on change */
@@ -747,8 +885,130 @@ void systemResetCallback()
     outputPort(i, readPort(i, portConfigInputs[i]), true);
   }
   */
+  readEepromConfig(init_phase);
+  if(!init_phase)
+  { 
+    EEPROM.put(EEPROM_ANALOG_INPUTS_TO_REPORT, (int)0);
+    for(int i=0; i<TOTAL_PORTS; i++)
+    {
+        EEPROM.update(EEPROM_DIGITAL_INPUTS_TO_REPORT + i, (byte)0);
+        EEPROM.update(EEPROM_PORT_CONFIG_INPUTS + i, (byte)0);
+        EEPROM.update(EEPROM_PORT_CONFIG_PULL_UPS + i, (byte)0);
+    }
+
+    EEPROM.get(EEPROM_ANALOG_INPUTS_TO_REPORT, analogInputsToReport);
+  } 
   isResetting = false;
 }
+
+void systemResetCallback()
+{
+    systemResetCallbackFunc(false);
+}
+
+void blink()
+{
+  digitalWrite(BLINK_PIN, HIGH);
+  blinkMillis = millis();
+}
+
+inline void readVirtualWire()
+{
+  uint8_t buf[VW_MAX_MESSAGE_LEN];
+  uint8_t buflen = VW_MAX_MESSAGE_LEN;
+  if (vw_get_message(buf, &buflen))
+  {
+    if (buflen < HEADER_LENGTH + 1) return; // our headers and at least 1 bytes of data
+    
+    uint8_t home_address = buf[0];
+    uint8_t sender_address = buf[1];
+    uint8_t recipient_address = buf[2];
+    uint8_t command = buf[3];
+
+    uint8_t *arg1 = &buf[4];
+    uint8_t *arg2 = &buf[5];
+    // check correct address and ignore if not ours
+    if (home_address == home_id && (recipient_address == device_id || recipient_address == BROADCAST_RECIPIENT))
+    {
+      switch(command) {
+        case VIRTUALWIRE_SET_PIN_MODE:
+          setPinModeCallback(*arg1, *arg2);
+          break;
+        case VIRTUALWIRE_ANALOG_MESSAGE:
+          analogWriteCallback(*arg1, *arg2);
+          break;
+        case VIRTUALWIRE_DIGITAL_MESSAGE:
+          digitalWriteCallback(*arg1, *arg2);
+          break;
+        case VIRTUALWIRE_START_SYSEX:
+          sysexCallback(arg1, buflen - HEADER_LENGTH - 1, arg2);
+          break;
+        case VIRTUALWIRE_SET_DIGITAL_PIN_VALUE:
+          setPinValueCallback(*arg1, *arg2);
+          break;
+        case VIRTUALWIRE_SET_VIRTUAL_PIN_VALUE:
+        case VIRTUALWIRE_CUSTOM_MESSAGE:
+        case VIRTUALWIRE_DIGITAL_BROADCAST:
+        case VIRTUALWIRE_ANALOG_BROADCAST:
+          Firmata.write(START_SYSEX);
+          Firmata.write(SYSEX_DIGITAL_PULSE);
+          Firmata.write(sender_address);
+          Firmata.write(command);
+          
+          for(int i=0; i < buflen - HEADER_LENGTH; i++)
+              Firmata.write(arg1[i]);
+          
+          Firmata.write(END_SYSEX);
+          break;
+        }
+      }
+    }
+}
+    
+void readEepromConfig(bool init_phase)
+{
+  home_id = EEPROM.read(EEPROM_HOME_ID_ADR);
+  device_id = EEPROM.read(EEPROM_DEVICE_ID_ADR);
+  EEPROM.get(EEPROM_SAMPLING_INTERVAL, samplingInterval);
+  vw_rx_pin = EEPROM.read(EEPROM_VIRTUALWIRE_RX_PIN_ADR);
+  vw_tx_pin = EEPROM.read(EEPROM_VIRTUALWIRE_TX_PIN_ADR);
+
+  if(vw_rx_pin)
+    setPinModeCallback(vw_rx_pin, PIN_MODE_VIRTUALWIRE_READ);
+  
+  if(vw_tx_pin)
+    setPinModeCallback(vw_tx_pin, PIN_MODE_VIRTUALWIRE_WRITE);
+
+  if(init_phase)
+  {
+      EEPROM.get(EEPROM_ANALOG_INPUTS_TO_REPORT, analogInputsToReport);
+      for(int input_nr = 0; input_nr < TOTAL_ANALOG_PINS; input_nr ++)
+          if((1 << input_nr) & analogInputsToReport)
+             setPinModeCallback(input_nr, PIN_MODE_ANALOG);
+
+      for(int port=0; port<TOTAL_PORTS; port++)
+      {
+        reportPINs[port] = EEPROM.read(EEPROM_DIGITAL_INPUTS_TO_REPORT + port);
+        portConfigInputs[port] = EEPROM.read(EEPROM_PORT_CONFIG_INPUTS + port);
+        portConfigPullUps[port] = EEPROM.read(EEPROM_PORT_CONFIG_PULL_UPS + port);
+
+        for(uint8_t bit=0; bit<8; bit++)
+            if(portConfigInputs[port] & (1 << bit))
+            {
+                uint8_t pin_nr = 8*port + bit;
+                if(portConfigPullUps[port] & (1 << bit))
+                {
+                    setPinModeCallback(pin_nr, PIN_MODE_PULLUP);
+                }
+                else
+                {
+                    setPinModeCallback(pin_nr, PIN_MODE_INPUT);
+                }
+            }
+      }
+  }
+}
+
 
 void setup()
 {
@@ -762,19 +1022,18 @@ void setup()
   Firmata.attach(SET_DIGITAL_PIN_VALUE, setPinValueCallback);
   Firmata.attach(START_SYSEX, sysexCallback);
   Firmata.attach(SYSTEM_RESET, systemResetCallback);
-
-  // to use a port other than Serial, such as Serial1 on an Arduino Leonardo or Mega,
-  // Call begin(baud) on the alternate serial port and pass it to Firmata to begin like this:
-  // Serial1.begin(57600);
-  // Firmata.begin(Serial1);
-  // However do not do this if you are using SERIAL_MESSAGE
-
+  setPinModeCallback(BLINK_PIN, PIN_MODE_OUTPUT);
+  
+// to use a port other than Serial, such as Serial1 on an Arduino Leonardo or Mega,
+// Call begin(baud) on the alternate serial port and pass it to Firmata to begin like this:
+// Serial1.begin(57600);
+// Firmata.begin(Serial1);
+// However do not do this if you are using SERIAL_MESSAGE
   Firmata.begin(57600);
   while (!Serial) {
     ; // wait for serial port to connect. Needed for ATmega32u4-based boards and Arduino 101
   }
-
-  systemResetCallback();  // reset to default config
+  systemResetCallbackFunc(true);  // reset to default config
 }
 
 /*==============================================================================
@@ -782,31 +1041,45 @@ void setup()
  *============================================================================*/
 void loop()
 {
-  uint8_t buf[VW_MAX_MESSAGE_LEN];
-  uint8_t buflen = VW_MAX_MESSAGE_LEN;
    
   byte pin, analogPin;
-
-  /* DIGITALREAD - as fast as possible, check for changes and output them to the
-   * FTDI buffer using Serial.print()  */
-  checkDigitalInputs();
+  int analogData;
+  
+  currentMillis = millis();
 
   /* STREAMREAD - processing incoming messagse as soon as possible, while still
    * checking digital inputs.  */
   while (Firmata.available())
+  {
     Firmata.processInput();
+    lastSerialMillis = currentMillis;
+    serial_enabled = true;
+  }
 
   // TODO - ensure that Stream buffer doesn't go over 60 bytes
 
-  currentMillis = millis();
+  if(serial_enabled && currentMillis - lastSerialMillis > SERIAL_SHUTDOWN_TIME)
+    serial_enabled = false;
+
+  if(blinkMillis && (currentMillis > blinkMillis + BLINK_INTERVAL))
+  {
+    digitalWrite(BLINK_PIN, LOW);
+    blinkMillis = 0;
+  }
   if (currentMillis - previousMillis > samplingInterval) {
     previousMillis += samplingInterval;
+    /* DIGITALREAD - as fast as possible, check for changes and output them to the
+     * FTDI buffer using Serial.print()  */
+    checkDigitalInputs();
     /* ANALOGREAD - do all analogReads() at the configured sampling interval */
     for (pin = 0; pin < TOTAL_PINS; pin++) {
       if (IS_PIN_ANALOG(pin) && Firmata.getPinMode(pin) == PIN_MODE_ANALOG) {
         analogPin = PIN_TO_ANALOG(pin);
         if (analogInputsToReport & (1 << analogPin)) {
-          Firmata.sendAnalog(analogPin, analogRead(analogPin));
+          analogData = analogRead(analogPin);
+          if(serial_enabled)
+             Firmata.sendAnalog(analogPin, analogData);
+          sendVirtualWireAnalogOutput(analogPin, analogData);
         }
       }
     }
@@ -817,17 +1090,7 @@ void loop()
       }
     }
   }
-  
-  if (vw_get_message(buf, &buflen))
-  {
-    Firmata.write(START_SYSEX);
-    Firmata.write(SYSEX_DIGITAL_PULSE);
-    for(int i=0; i < buflen; i++)
-    {
-        Firmata.write(buf[i]);
-    }
-    Firmata.write(END_SYSEX);
-  }
+  readVirtualWire(); 
 #ifdef FIRMATA_SERIAL_FEATURE
   serialFeature.update();
 #endif
