@@ -25,10 +25,6 @@
 
 // Device specific configuraiton
 
-
-// TODOes:
-// - make sure even digital messages are not sent more than sampling rate allows via VirtualWire.
-
 #include <VirtualWire.h>
 #include <Wire.h>
 #include <Firmata.h>
@@ -1039,11 +1035,6 @@ void loop()
    
   byte pin, analogPin;
   int analogData;
-
-
-  /* DIGITALREAD - as fast as possible, check for changes and output them to the
-   * FTDI buffer using Serial.print()  */
-  checkDigitalInputs();
   
   currentMillis = millis();
 
@@ -1068,6 +1059,9 @@ void loop()
   }
   if (currentMillis - previousMillis > samplingInterval) {
     previousMillis += samplingInterval;
+    /* DIGITALREAD - as fast as possible, check for changes and output them to the
+     * FTDI buffer using Serial.print()  */
+    checkDigitalInputs();
     /* ANALOGREAD - do all analogReads() at the configured sampling interval */
     for (pin = 0; pin < TOTAL_PINS; pin++) {
       if (IS_PIN_ANALOG(pin) && Firmata.getPinMode(pin) == PIN_MODE_ANALOG) {
