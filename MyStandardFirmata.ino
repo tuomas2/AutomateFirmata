@@ -26,6 +26,9 @@
 // Device specific configuraiton
 
 
+// TODOes:
+// - make sure even digital messages are not sent more than sampling rate allows via VirtualWire.
+// - enable high frequency PWM on timer2
 
 #include <VirtualWire.h>
 #include <Wire.h>
@@ -46,11 +49,16 @@
 
 // the minimum interval for sampling analog input
 #define MINIMUM_SAMPLING_INTERVAL   1
-
+#define BLINK_INTERVAL 0
+#define BLINK_PIN 13
+#define SERIAL_SHUTDOWN_TIME 120000 // 2 minutes
 
 /*==============================================================================
  * GLOBAL VARIABLES
  *============================================================================*/
+
+#define VIRTUALWIRE_BAUDRATE 9600
+
 char tmpbuf[128];
 
 uint8_t home_id = 0x01; // Set this different to your neighbors 
@@ -59,10 +67,9 @@ uint8_t device_id = 0x01; // Set this individual within your home
 uint8_t vw_rx_pin = 0; // 0 disabled, otherwise pin number
 uint8_t vw_tx_pin = 0;
 
+boolean serial_enabled = true;
+
 static const int BROADCAST_RECIPIENT = 0xFF;
-
-#define MAX_SUBSCRIPTIONS 16
-
 static const uint8_t HEADER_LENGTH = 4;
 
 static const byte PIN_MODE_VIRTUALWIRE_WRITE = 0x0C;
@@ -123,7 +130,12 @@ byte portConfigPullUps[TOTAL_PORTS]; // each bit: 1 = pin in PULL_UP, 0 = anythi
 /* timer variables */
 unsigned long currentMillis;        // store the current value from millis()
 unsigned long previousMillis;       // for comparison with currentMillis
+unsigned long lastSerialMillis = 0;       // for comparison with currentMillis
+
 unsigned int samplingInterval = 19; // how often to run the main loop (in ms)
+
+unsigned long blinkMillis=0;       // for comparison with currentMillis
+
 
 /* i2c data */
 struct i2c_device_info {
@@ -309,6 +321,7 @@ void sendVirtualWireDigitalOutput(byte portNumber, byte portValue)
    data[3] = VIRTUALWIRE_DIGITAL_BROADCAST; 
    data[4] = portNumber;
    data[5] = portValue;
+   blink();
    vw_send(data, sizeof(data));
 }
 
@@ -324,6 +337,7 @@ void sendVirtualWireAnalogOutput(byte pinNumber, int analogData)
    data[3] = VIRTUALWIRE_ANALOG_BROADCAST; 
    data[4] = pinNumber;
    data[5] = analogData;
+   blink();
    vw_send(data, sizeof(data));  
 }
 
@@ -333,7 +347,8 @@ void outputPort(byte portNumber, byte portValue, byte forceSend)
   portValue = portValue & portConfigInputs[portNumber];
   // only send if the value is different than previously sent
   if (forceSend || previousPINs[portNumber] != portValue) {
-    Firmata.sendDigitalPort(portNumber, portValue);
+    if(serial_enabled)
+        Firmata.sendDigitalPort(portNumber, portValue);
     previousPINs[portNumber] = portValue;
     sendVirtualWireDigitalOutput(portNumber, portValue);
   }
@@ -463,7 +478,7 @@ void setPinModeCallback(byte pin, int mode)
         if (IS_PIN_DIGITAL(pin)) {
             vw_tx_stop();
             vw_set_tx_pin(pin);
-            vw_setup(2000);
+            vw_setup(VIRTUALWIRE_BAUDRATE);
             vw_tx_pin = pin;
             EEPROM.update(EEPROM_VIRTUALWIRE_TX_PIN_ADR, pin);
         }
@@ -472,7 +487,7 @@ void setPinModeCallback(byte pin, int mode)
         if (IS_PIN_DIGITAL(pin)) {
             vw_rx_stop();
             vw_set_rx_pin(pin);
-            vw_setup(2000);
+            vw_setup(VIRTUALWIRE_BAUDRATE);
             vw_rx_start();
             vw_rx_pin = pin;
             EEPROM.update(EEPROM_VIRTUALWIRE_RX_PIN_ADR, pin);
@@ -615,6 +630,7 @@ void sysexCallback(byte command, byte argc, byte *argv)
 
   switch (command) {
     case SYSEX_VIRTUALWIRE_MESSAGE:
+        blink();
         vw_send(argv, argc);
         break;
     case SYSEX_SET_IDENTIFICATION:
@@ -887,10 +903,8 @@ void systemResetCallback()
 
 void blink()
 {
-  digitalWrite(13, HIGH);
-  delay(100);
-  digitalWrite(13, LOW);
-  delay(100);
+  digitalWrite(BLINK_PIN, HIGH);
+  blinkMillis = millis();
 }
 
 inline void readVirtualWire()
@@ -1003,18 +1017,17 @@ void setup()
   Firmata.attach(SET_DIGITAL_PIN_VALUE, setPinValueCallback);
   Firmata.attach(START_SYSEX, sysexCallback);
   Firmata.attach(SYSTEM_RESET, systemResetCallback);
+  setPinModeCallback(BLINK_PIN, PIN_MODE_OUTPUT);
   
-  // to use a port other than Serial, such as Serial1 on an Arduino Leonardo or Mega,
-  // Call begin(baud) on the alternate serial port and pass it to Firmata to begin like this:
-  // Serial1.begin(57600);
-  // Firmata.begin(Serial1);
-  // However do not do this if you are using SERIAL_MESSAGE
-
+// to use a port other than Serial, such as Serial1 on an Arduino Leonardo or Mega,
+// Call begin(baud) on the alternate serial port and pass it to Firmata to begin like this:
+// Serial1.begin(57600);
+// Firmata.begin(Serial1);
+// However do not do this if you are using SERIAL_MESSAGE
   Firmata.begin(57600);
   while (!Serial) {
     ; // wait for serial port to connect. Needed for ATmega32u4-based boards and Arduino 101
   }
-
   systemResetCallbackFunc(true);  // reset to default config
 }
 
@@ -1027,18 +1040,32 @@ void loop()
   byte pin, analogPin;
   int analogData;
 
+
   /* DIGITALREAD - as fast as possible, check for changes and output them to the
    * FTDI buffer using Serial.print()  */
   checkDigitalInputs();
+  
+  currentMillis = millis();
 
   /* STREAMREAD - processing incoming messagse as soon as possible, while still
    * checking digital inputs.  */
   while (Firmata.available())
+  {
     Firmata.processInput();
+    lastSerialMillis = currentMillis;
+    serial_enabled = true;
+  }
 
   // TODO - ensure that Stream buffer doesn't go over 60 bytes
 
-  currentMillis = millis();
+  if(serial_enabled && currentMillis - lastSerialMillis > SERIAL_SHUTDOWN_TIME)
+    serial_enabled = false;
+
+  if(blinkMillis && (currentMillis > blinkMillis + BLINK_INTERVAL))
+  {
+    digitalWrite(BLINK_PIN, LOW);
+    blinkMillis = 0;
+  }
   if (currentMillis - previousMillis > samplingInterval) {
     previousMillis += samplingInterval;
     /* ANALOGREAD - do all analogReads() at the configured sampling interval */
@@ -1047,7 +1074,8 @@ void loop()
         analogPin = PIN_TO_ANALOG(pin);
         if (analogInputsToReport & (1 << analogPin)) {
           analogData = analogRead(analogPin);
-          Firmata.sendAnalog(analogPin, analogData);
+          if(serial_enabled)
+             Firmata.sendAnalog(analogPin, analogData);
           sendVirtualWireAnalogOutput(analogPin, analogData);
         }
       }
