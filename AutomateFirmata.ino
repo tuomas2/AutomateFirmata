@@ -1,4 +1,12 @@
 /*
+
+  AutomateFirmata. Firmata with some additional features for Automate 
+  (https://github.com/tuomas2/automate)
+
+  Repository URL: https://github.com/tuomas2/AutomateFirmata
+
+  Based on StandardFirmata.
+
   Firmata is a generic protocol for communicating with microcontrollers
   from software on a host computer. It is intended to work with
   any host computer software package.
@@ -12,6 +20,7 @@
   Copyright (C) 2010-2011 Paul Stoffregen.  All rights reserved.
   Copyright (C) 2009 Shigeru Kobayashi.  All rights reserved.
   Copyright (C) 2009-2016 Jeff Hoefs.  All rights reserved.
+  Copyright (C) 2017 Tuomas Airaksinen. All rights reserved.
 
   This library is free software; you can redistribute it and/or
   modify it under the terms of the GNU Lesser General Public
