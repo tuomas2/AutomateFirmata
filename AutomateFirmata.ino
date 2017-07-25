@@ -61,7 +61,7 @@
  * GLOBAL VARIABLES
  *============================================================================*/
 
-#define VIRTUALWIRE_BAUDRATE 9600
+#define VIRTUALWIRE_BAUDRATE 2000 // setting 9600 breaks mysteriously other other input reading
 
 char tmpbuf[128];
 
@@ -853,7 +853,7 @@ void systemResetCallbackFunc(bool init_phase)
   if (isI2CEnabled) {
     disableI2CPins();
   }
-
+  
   for (byte i = 0; i < TOTAL_PORTS; i++) {
     reportPINs[i] = false;    // by default, reporting off
     portConfigInputs[i] = 0;  // until activated
@@ -872,9 +872,6 @@ void systemResetCallbackFunc(bool init_phase)
       setPinModeCallback(i, OUTPUT);
     }
   }
-  // by default, do not report any analog inputs
-  
-  analogInputsToReport = 0;
 
   /* send digital inputs to set the initial state on the host computer,
    * since once in the loop(), this firmware will only send on change */
@@ -885,9 +882,12 @@ void systemResetCallbackFunc(bool init_phase)
     outputPort(i, readPort(i, portConfigInputs[i]), true);
   }
   */
-  readEepromConfig(init_phase);
-  if(!init_phase)
+  if(init_phase)
+    readEepromConfig();
+  else
   { 
+    // by default, do not report any analog inputs
+    analogInputsToReport = 0;
     EEPROM.put(EEPROM_ANALOG_INPUTS_TO_REPORT, (int)0);
     for(int i=0; i<TOTAL_PORTS; i++)
     {
@@ -895,8 +895,6 @@ void systemResetCallbackFunc(bool init_phase)
         EEPROM.update(EEPROM_PORT_CONFIG_INPUTS + i, (byte)0);
         EEPROM.update(EEPROM_PORT_CONFIG_PULL_UPS + i, (byte)0);
     }
-
-    EEPROM.get(EEPROM_ANALOG_INPUTS_TO_REPORT, analogInputsToReport);
   } 
   isResetting = false;
 }
@@ -965,7 +963,7 @@ inline void readVirtualWire()
     }
 }
     
-void readEepromConfig(bool init_phase)
+void readEepromConfig()
 {
   home_id = EEPROM.read(EEPROM_HOME_ID_ADR);
   device_id = EEPROM.read(EEPROM_DEVICE_ID_ADR);
@@ -979,33 +977,26 @@ void readEepromConfig(bool init_phase)
   if(vw_tx_pin)
     setPinModeCallback(vw_tx_pin, PIN_MODE_VIRTUALWIRE_WRITE);
 
-  if(init_phase)
+  EEPROM.get(EEPROM_ANALOG_INPUTS_TO_REPORT, analogInputsToReport);
+  for(int analog_pin = 0; analog_pin < TOTAL_ANALOG_PINS; analog_pin ++)
+      if((1 << analog_pin) & analogInputsToReport)
+         setPinModeCallback(analog_pin, PIN_MODE_ANALOG);
+
+  for(int port=0; port<TOTAL_PORTS; port++)
   {
-      EEPROM.get(EEPROM_ANALOG_INPUTS_TO_REPORT, analogInputsToReport);
-      for(int input_nr = 0; input_nr < TOTAL_ANALOG_PINS; input_nr ++)
-          if((1 << input_nr) & analogInputsToReport)
-             setPinModeCallback(input_nr, PIN_MODE_ANALOG);
+    reportPINs[port] = EEPROM.read(EEPROM_DIGITAL_INPUTS_TO_REPORT + port);
+    portConfigInputs[port] = EEPROM.read(EEPROM_PORT_CONFIG_INPUTS + port);
+    portConfigPullUps[port] = EEPROM.read(EEPROM_PORT_CONFIG_PULL_UPS + port);
 
-      for(int port=0; port<TOTAL_PORTS; port++)
-      {
-        reportPINs[port] = EEPROM.read(EEPROM_DIGITAL_INPUTS_TO_REPORT + port);
-        portConfigInputs[port] = EEPROM.read(EEPROM_PORT_CONFIG_INPUTS + port);
-        portConfigPullUps[port] = EEPROM.read(EEPROM_PORT_CONFIG_PULL_UPS + port);
-
-        for(uint8_t bit=0; bit<8; bit++)
-            if(portConfigInputs[port] & (1 << bit))
-            {
-                uint8_t pin_nr = 8*port + bit;
-                if(portConfigPullUps[port] & (1 << bit))
-                {
-                    setPinModeCallback(pin_nr, PIN_MODE_PULLUP);
-                }
-                else
-                {
-                    setPinModeCallback(pin_nr, PIN_MODE_INPUT);
-                }
-            }
-      }
+    for(uint8_t bit=0; bit<8; bit++)
+        if(portConfigInputs[port] & (1 << bit))
+        {
+            uint8_t pin_nr = 8*port + bit;
+            if(portConfigPullUps[port] & (1 << bit))
+                setPinModeCallback(pin_nr, PIN_MODE_PULLUP);
+            else
+                setPinModeCallback(pin_nr, PIN_MODE_INPUT);
+        }
   }
 }
 
@@ -1059,8 +1050,10 @@ void loop()
   // TODO - ensure that Stream buffer doesn't go over 60 bytes
 
   if(serial_enabled && currentMillis - lastSerialMillis > SERIAL_SHUTDOWN_TIME)
+  {
+    Firmata.sendString("Disabling serial output");
     serial_enabled = false;
-
+  }
   if(blinkMillis && (currentMillis > blinkMillis + BLINK_INTERVAL))
   {
     digitalWrite(BLINK_PIN, LOW);
