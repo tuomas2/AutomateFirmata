@@ -93,11 +93,8 @@ static const byte VIRTUALWIRE_ANALOG_MESSAGE = 0x02;
 static const byte VIRTUALWIRE_DIGITAL_MESSAGE = 0x03;
 static const byte VIRTUALWIRE_START_SYSEX = 0x04;
 static const byte VIRTUALWIRE_SET_DIGITAL_PIN_VALUE = 0x05;
-static const byte VIRTUALWIRE_SET_VIRTUAL_PIN_VALUE = 0x06;
-static const byte VIRTUALWIRE_CUSTOM_MESSAGE = 0x07;
-
-static const byte VIRTUALWIRE_DIGITAL_BROADCAST = 0x08;
-static const byte VIRTUALWIRE_ANALOG_BROADCAST = 0x09;
+static const byte VIRTUALWIRE_DIGITAL_BROADCAST = 0x06;
+static const byte VIRTUALWIRE_ANALOG_BROADCAST = 0x07;
 
 // EEPROM addressses
 static const int EEPROM_HOME_ID_ADR = 0;
@@ -109,11 +106,6 @@ static const int EEPROM_ANALOG_INPUTS_TO_REPORT = 7; // 2 byte
 static const int EEPROM_DIGITAL_INPUTS_TO_REPORT = 10; // size required: TOTAL_PORTS x 1 byte
 static const int EEPROM_PORT_CONFIG_INPUTS = 30; // size required: TOTAL_PORTS x 1 byte
 static const int EEPROM_PORT_CONFIG_PULL_UPS = 50; // size required: TOTAL_PORTS x 1 byte
-
-
-// Our custom command ids that are sent via serial to host.
-//static const int CMD_CUSTOM_MESSAGE = 0x01;
-//static const int CMD_VIRTUAL_PIN = 0x02;
 
 
 #ifdef FIRMATA_SERIAL_FEATURE
@@ -944,8 +936,6 @@ inline void readVirtualWire()
         case VIRTUALWIRE_SET_DIGITAL_PIN_VALUE:
           setPinValueCallback(*arg1, *arg2);
           break;
-        case VIRTUALWIRE_SET_VIRTUAL_PIN_VALUE:
-        case VIRTUALWIRE_CUSTOM_MESSAGE:
         case VIRTUALWIRE_DIGITAL_BROADCAST:
         case VIRTUALWIRE_ANALOG_BROADCAST:
           Firmata.write(START_SYSEX);
