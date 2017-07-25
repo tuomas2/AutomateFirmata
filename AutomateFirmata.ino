@@ -325,13 +325,14 @@ void sendVirtualWireAnalogOutput(byte pinNumber, int analogData)
    if(!vw_tx_pin)
       return;
 
-   byte data[6];
+   byte data[7];
    data[0] = home_id; 
    data[1] = device_id; // sender
    data[2] = BROADCAST_RECIPIENT;
    data[3] = VIRTUALWIRE_ANALOG_BROADCAST; 
    data[4] = pinNumber;
-   data[5] = analogData;
+   data[5] = analogData >> 8; // msb
+   data[6] = analogData;      // lsb
    blink();
    vw_send(data, sizeof(data));  
 }
@@ -938,15 +939,16 @@ inline void readVirtualWire()
           break;
         case VIRTUALWIRE_DIGITAL_BROADCAST:
         case VIRTUALWIRE_ANALOG_BROADCAST:
-          Firmata.write(START_SYSEX);
-          Firmata.write(SYSEX_DIGITAL_PULSE);
-          Firmata.write(sender_address);
-          Firmata.write(command);
-          
-          for(int i=0; i < buflen - HEADER_LENGTH; i++)
-              Firmata.write(arg1[i]);
-          
-          Firmata.write(END_SYSEX);
+          if(serial_enabled)
+          {
+            Firmata.write(START_SYSEX);
+            Firmata.write(SYSEX_DIGITAL_PULSE);
+            Firmata.write(sender_address);
+            Firmata.write(command);
+            for(int i=0; i < buflen - HEADER_LENGTH; i++)
+                Firmata.write(arg1[i]);
+            Firmata.write(END_SYSEX);
+          }
           break;
         }
       }
