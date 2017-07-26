@@ -31,15 +31,12 @@
 
 TODO
 
- - Test / ensure that PWM works despite power saving if it is being used. (pwm should not be used for transmitters, only receivers...)
- - Changes made to VirtualWire.h / VirtualWire.cpp (removed inlines and added declaration for vw_tx_stop etc.)
- # find a way to configure also to receive immediate notifications about digital sensor value changes 
+ - Test high frequency PWM 
+ - Test power saving (measurements)
+ - Support PTT?
+
 */
 
-
-
-
-// Device specific configuraiton
 
 #include <VirtualWire.h>
 #include <Wire.h>
@@ -65,6 +62,16 @@ TODO
 #define BLINK_INTERVAL 0
 #define BLINK_PIN 13
 #define SERIAL_SHUTDOWN_TIME 120000 // 2 minutes
+
+// VirtualWire.h does not export this
+#ifdef __cplusplus
+extern "C"
+{
+    #endif //__cplusplus
+    extern void vw_tx_stop();
+    #ifdef __cplusplus
+}
+#endif //__cplusplus
 
 /*==============================================================================
  * GLOBAL VARIABLES
