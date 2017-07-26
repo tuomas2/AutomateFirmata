@@ -33,7 +33,8 @@
 
 TODO
 
-- Receiver stops sending updates via serial at some point. 
+ - Using LowPower.h, we could try to save some power if serial and vw_rx_pin are disabled.
+   Also otherwise we could check which features of chip are needed / in use.
 
 */
 
@@ -46,6 +47,7 @@ TODO
 #include <Wire.h>
 #include <Firmata.h>
 #include <EEPROM.h>
+#include <LowPower.h>
 
 #define I2C_WRITE                   B00000000
 #define I2C_READ                    B00001000
@@ -1037,7 +1039,17 @@ void loop()
   byte pin, analogPin;
   int analogData;
   
-  currentMillis = millis();
+
+  if(!vw_rx_pin && !serial_enabled)
+  {
+    vw_wait_tx();
+    blink();
+    LowPower.powerDown(SLEEP_250MS, ADC_OFF, BOD_OFF);
+    currentMillis += 250;
+  }
+  else
+    currentMillis = millis();
+ 
 
   /* STREAMREAD - processing incoming messagse as soon as possible, while still
    * checking digital inputs.  */
@@ -1060,8 +1072,10 @@ void loop()
     digitalWrite(BLINK_PIN, LOW);
     blinkMillis = 0;
   }
+  
+ 
   if (currentMillis - previousMillis > samplingInterval) {
-    previousMillis += samplingInterval;
+    previousMillis = currentMillis;
     /* DIGITALREAD - as fast as possible, check for changes and output them to the
      * FTDI buffer using Serial.print()  */
     checkDigitalInputs();
