@@ -7,5 +7,9 @@ See automate at https://github.com/tuomas2/automate
  - Servo support removed (conflicts with VirtualWire due to use of Timer1).
  - If PWM is used on Pins 3/11, timer2 divider is set to 1, resulting in 31.25 KHz PWM frequency. 
 
-Requires VirtualWire: https://github.com/danielesteban/ArduinoLib/tree/master/VirtualWire @ eec925d  
-Is based on StandardFirmata https://github.com/firmata/arduino/blob/master/examples/StandardFirmata/StandardFirmata.ino @ 281b99f  
+Requires:
+ - VirtualWire: https://github.com/danielesteban/ArduinoLib/tree/master/VirtualWire @ eec925d  
+ - Low-Power: https://github.com/rocketscream/Low-Power @ 530e8e7
+
+Work is based on StandardFirmata 
+https://github.com/firmata/arduino/blob/master/examples/StandardFirmata/StandardFirmata.ino @ 281b99f  
