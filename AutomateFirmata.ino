@@ -32,6 +32,7 @@
 TODO
 
  - Test / ensure that PWM works despite power saving if it is being used. (pwm should not be used for transmitters, only receivers...)
+ - Changes made to VirtualWire.h / VirtualWire.cpp (removed inlines and added declaration for vw_tx_stop etc.)
  # find a way to configure also to receive immediate notifications about digital sensor value changes 
 */
 

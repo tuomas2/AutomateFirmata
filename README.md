@@ -1,7 +1,9 @@
 Firmata with additional features and changes related to improve co-operation with Automate
 ==========================================================================================
 
-See automate at https://github.com/tuomas2/automate
+See automate at <https://github.com/tuomas2/automate> and 
+documentation <http://python-automate.readthedocs.io/en/latest/official_extensions/arduino.html>
+
 
  - VirtualWire support added. (Uses Timer1, so don't use PWM on ports 9,11) 
  - Servo support removed (conflicts with VirtualWire due to use of Timer1).
