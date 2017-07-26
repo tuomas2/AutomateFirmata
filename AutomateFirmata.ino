@@ -34,8 +34,6 @@ TODO
  - Test high frequency PWM 
  - Test power saving (measurements)
  - test Automate with StandardFirmata
- - check higher vw speed -- does it still cause problem in (other) reading digital inputs?
- # Figure out tx & rx pin problem (ports are configured in vw_setup.
 
 */
 
@@ -64,6 +62,7 @@ TODO
 #define BLINK_INTERVAL 0
 #define BLINK_PIN 13
 #define SERIAL_SHUTDOWN_TIME 120000 // 2 minutes
+#define VIRTUALWIRE_BAUDRATE 2000 
 
 // VirtualWire.h does not export this but we need it.
 extern "C"
@@ -75,7 +74,6 @@ extern "C"
  * GLOBAL VARIABLES
  *============================================================================*/
 
-#define VIRTUALWIRE_BAUDRATE 2000 // setting 9600 breaks mysteriously other other input reading
 
 char tmpbuf[128];
 
@@ -93,9 +91,6 @@ int sleep_time = 1000;
 
 static const int BROADCAST_RECIPIENT = 0xFF;
 static const uint8_t HEADER_LENGTH = 4;
-
-static const byte PIN_MODE_VIRTUALWIRE_WRITE = 0x0C;
-static const byte PIN_MODE_VIRTUALWIRE_READ = 0x0D;
 
 // Incoming sysexs (0x00-0x0F are user defined according to FirmataConstants.h, let's use those)
 static const byte SYSEX_VIRTUALWIRE_MESSAGE = 0x01; // incoming and outgoing
