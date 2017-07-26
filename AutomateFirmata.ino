@@ -33,11 +33,9 @@ TODO
 
  - Test high frequency PWM 
  - Test power saving (measurements)
- - Support PTT?
  - test Automate with StandardFirmata
  - check higher vw speed -- does it still cause problem in (other) reading digital inputs?
- - Figure out tx & rx pin problem (ports are configured in vw_setup.
-
+ # Figure out tx & rx pin problem (ports are configured in vw_setup.
 
 */
 
@@ -84,6 +82,7 @@ char tmpbuf[128];
 uint8_t home_id = 0x01; // Set this different to your neighbors 
 uint8_t device_id = 0x01; // Set this individual within your home
 
+uint8_t vw_ptt_pin = 0;
 uint8_t vw_rx_pin = 0; // 0 disabled, otherwise pin number
 uint8_t vw_tx_pin = 0;
 
@@ -97,13 +96,12 @@ static const uint8_t HEADER_LENGTH = 4;
 
 static const byte PIN_MODE_VIRTUALWIRE_WRITE = 0x0C;
 static const byte PIN_MODE_VIRTUALWIRE_READ = 0x0D;
-// Outgoing sysex's
-static const int SYSEX_DIGITAL_PULSE = 0x91;
 
 // Incoming sysexs (0x00-0x0F are user defined according to FirmataConstants.h, let's use those)
-static const byte SYSEX_VIRTUALWIRE_MESSAGE = 0x01;
+static const byte SYSEX_VIRTUALWIRE_MESSAGE = 0x01; // incoming and outgoing
 static const byte SYSEX_SET_IDENTIFICATION = 0x02;
 static const byte SYSEX_KEEP_ALIVE = 0x03;
+static const byte SYSEX_SETUP_VIRTUALWIRE = 0x04;
 
 
 // Virtualwire command bytes
@@ -120,6 +118,7 @@ static const int EEPROM_HOME_ID_ADR = 0;
 static const int EEPROM_DEVICE_ID_ADR = 1;
 static const int EEPROM_VIRTUALWIRE_RX_PIN_ADR = 2;
 static const int EEPROM_VIRTUALWIRE_TX_PIN_ADR = 3;
+static const int EEPROM_VIRTUALWIRE_PTT_PIN_ADR = 4;
 static const int EEPROM_SAMPLING_INTERVAL = 5; // 2 bytes
 static const int EEPROM_ANALOG_INPUTS_TO_REPORT = 7; // 2 byte
 static const int EEPROM_DIGITAL_INPUTS_TO_REPORT = 10; // size required: TOTAL_PORTS x 1 byte
@@ -489,25 +488,6 @@ void setPinModeCallback(byte pin, int mode)
         Firmata.setPinMode(pin, PIN_MODE_I2C);
       }
       break;
-    case PIN_MODE_VIRTUALWIRE_WRITE:
-        if (IS_PIN_DIGITAL(pin)) {
-            vw_tx_stop();
-            vw_set_tx_pin(pin);
-            vw_setup(VIRTUALWIRE_BAUDRATE);
-            vw_tx_pin = pin;
-            EEPROM.update(EEPROM_VIRTUALWIRE_TX_PIN_ADR, pin);
-        }
-        break;
-    case PIN_MODE_VIRTUALWIRE_READ:
-        if (IS_PIN_DIGITAL(pin)) {
-            vw_rx_stop();
-            vw_set_rx_pin(pin);
-            vw_setup(VIRTUALWIRE_BAUDRATE);
-            vw_rx_start();
-            vw_rx_pin = pin;
-            EEPROM.update(EEPROM_VIRTUALWIRE_RX_PIN_ADR, pin);
-        }
-        break;
     case PIN_MODE_SERIAL:
 #ifdef FIRMATA_SERIAL_FEATURE
       serialFeature.handlePinMode(pin, PIN_MODE_SERIAL);
@@ -518,6 +498,22 @@ void setPinModeCallback(byte pin, int mode)
   }
   // TODO: save status to EEPROM here, if changed
 }
+
+void configureVirtualWire()
+{
+  vw_rx_stop();
+  vw_tx_stop();
+  if(vw_rx_pin)
+      vw_set_rx_pin(vw_rx_pin);
+  if(vw_tx_pin)
+      vw_set_tx_pin(vw_tx_pin);
+  if(vw_ptt_pin)
+      vw_set_ptt_pin(vw_ptt_pin);
+  if(vw_tx_pin || vw_rx_pin)
+     vw_setup(VIRTUALWIRE_BAUDRATE);
+  if(vw_rx_pin)
+      vw_rx_start();
+ }
 
 /*
  * Sets the value of an individual pin. Useful if you want to set a pin value but
@@ -647,6 +643,15 @@ void sysexCallback(byte command, byte argc, byte *argv)
 
   switch (command) {
     case SYSEX_KEEP_ALIVE:
+        break;
+    case SYSEX_SETUP_VIRTUALWIRE:
+        vw_rx_pin = argv[0];
+        vw_tx_pin = argv[1];
+        vw_ptt_pin = argv[2];
+        EEPROM.update(EEPROM_VIRTUALWIRE_RX_PIN_ADR, vw_rx_pin);
+        EEPROM.update(EEPROM_VIRTUALWIRE_TX_PIN_ADR, vw_tx_pin);
+        EEPROM.update(EEPROM_VIRTUALWIRE_PTT_PIN_ADR, vw_ptt_pin);
+        configureVirtualWire();
         break;
     case SYSEX_VIRTUALWIRE_MESSAGE:
         blink();
@@ -969,8 +974,10 @@ void systemResetCallbackFunc(bool init_phase)
     vw_tx_stop();
     vw_rx_pin = 0;
     vw_tx_pin = 0;
+    vw_ptt_pin = 0;
     EEPROM.update(EEPROM_VIRTUALWIRE_TX_PIN_ADR, 0);
     EEPROM.update(EEPROM_VIRTUALWIRE_RX_PIN_ADR, 0);
+    EEPROM.update(EEPROM_VIRTUALWIRE_PTT_PIN_ADR, 0);
     samplingInterval = DEFAULT_SAMPLING_INTERVAL;
     EEPROM.put(EEPROM_SAMPLING_INTERVAL, samplingInterval);
   }
@@ -1029,7 +1036,7 @@ inline void readVirtualWire()
           if(serial_enabled)
           {
             Firmata.write(START_SYSEX);
-            Firmata.write(SYSEX_DIGITAL_PULSE);
+            Firmata.write(SYSEX_VIRTUALWIRE_MESSAGE);
             Firmata.write(sender_address);
             Firmata.write(command);
             for(int i=0; i < buflen - HEADER_LENGTH; i++)
@@ -1049,12 +1056,9 @@ void readEepromConfig()
   EEPROM.get(EEPROM_SAMPLING_INTERVAL, samplingInterval);
   vw_rx_pin = EEPROM.read(EEPROM_VIRTUALWIRE_RX_PIN_ADR);
   vw_tx_pin = EEPROM.read(EEPROM_VIRTUALWIRE_TX_PIN_ADR);
-
-  if(vw_rx_pin)
-    setPinModeCallback(vw_rx_pin, PIN_MODE_VIRTUALWIRE_READ);
+  vw_ptt_pin = EEPROM.read(EEPROM_VIRTUALWIRE_PTT_PIN_ADR);
   
-  if(vw_tx_pin)
-    setPinModeCallback(vw_tx_pin, PIN_MODE_VIRTUALWIRE_WRITE);
+  configureVirtualWire();
 
   EEPROM.get(EEPROM_ANALOG_INPUTS_TO_REPORT, analogInputsToReport);
   for(int analog_pin = 0; analog_pin < TOTAL_ANALOG_PINS; analog_pin ++)
