@@ -34,6 +34,10 @@ TODO
  - Test high frequency PWM 
  - Test power saving (measurements)
  - Support PTT?
+ - test Automate with StandardFirmata
+ - check higher vw speed -- does it still cause problem in (other) reading digital inputs?
+ - Figure out tx & rx pin problem (ports are configured in vw_setup.
+
 
 */
 
@@ -63,15 +67,11 @@ TODO
 #define BLINK_PIN 13
 #define SERIAL_SHUTDOWN_TIME 120000 // 2 minutes
 
-// VirtualWire.h does not export this
-#ifdef __cplusplus
+// VirtualWire.h does not export this but we need it.
 extern "C"
 {
-    #endif //__cplusplus
     extern void vw_tx_stop();
-    #ifdef __cplusplus
 }
-#endif //__cplusplus
 
 /*==============================================================================
  * GLOBAL VARIABLES
@@ -1081,7 +1081,12 @@ void readEepromConfig()
 
 
 void setup()
-{
+{ 
+  // Disable vw pins initially by setting them to invalid value
+  vw_set_ptt_pin(255); 
+  vw_set_tx_pin(255); 
+  vw_set_rx_pin(255);
+
   Firmata.setFirmwareVersion(FIRMATA_FIRMWARE_MAJOR_VERSION, FIRMATA_FIRMWARE_MINOR_VERSION);
 
   Firmata.attach(ANALOG_MESSAGE, analogWriteCallback);
