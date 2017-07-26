@@ -33,9 +33,8 @@
 
 TODO
 
- - Using LowPower.h, we could try to save some power if serial and vw_rx_pin are disabled.
-   Also otherwise we could check which features of chip are needed / in use.
-
+ - Test / ensure that PWM works despite power saving if it is being used.
+   
 */
 
 
@@ -63,6 +62,7 @@ TODO
 
 // the minimum interval for sampling analog input
 #define MINIMUM_SAMPLING_INTERVAL   1
+#define DEFAULT_SAMPLING_INTERVAL 500
 #define BLINK_INTERVAL 0
 #define BLINK_PIN 13
 #define SERIAL_SHUTDOWN_TIME 120000 // 2 minutes
@@ -82,6 +82,9 @@ uint8_t vw_rx_pin = 0; // 0 disabled, otherwise pin number
 uint8_t vw_tx_pin = 0;
 
 boolean serial_enabled = true;
+
+period_t sleep_mode = SLEEP_1S;
+int sleep_time = 1000;
 
 static const int BROADCAST_RECIPIENT = 0xFF;
 static const uint8_t HEADER_LENGTH = 4;
@@ -138,7 +141,7 @@ unsigned long currentMillis;        // store the current value from millis()
 unsigned long previousMillis;       // for comparison with currentMillis
 unsigned long lastSerialMillis = 0;       // for comparison with currentMillis
 
-unsigned int samplingInterval = 19; // how often to run the main loop (in ms)
+unsigned int samplingInterval = DEFAULT_SAMPLING_INTERVAL; // how often to run the main loop (in ms)
 
 unsigned long blinkMillis=0;       // for comparison with currentMillis
 
@@ -767,6 +770,7 @@ void sysexCallback(byte command, byte argc, byte *argv)
       } else {
         //Firmata.sendString("Not enough data");
       }
+      setSleepMode();
       EEPROM.put(EEPROM_SAMPLING_INTERVAL, samplingInterval);
       break;
     case EXTENDED_ANALOG:
@@ -844,6 +848,61 @@ void sysexCallback(byte command, byte argc, byte *argv)
  * SETUP()
  *============================================================================*/
 
+void setSleepMode()
+{
+  if(samplingInterval >= 8000) 
+  {
+    sleep_mode = SLEEP_8S;
+    sleep_time = 8000;
+  }
+  else if(samplingInterval >= 4000)
+  {
+    sleep_mode = SLEEP_4S;
+    sleep_time = 4000;
+  }
+  else if(samplingInterval >= 2000)
+  {
+    sleep_mode = SLEEP_2S;
+    sleep_time = 2000;
+  }
+  else if(samplingInterval >= 1000)
+  {
+    sleep_mode = SLEEP_1S;
+    sleep_time = 1000;
+  }
+  else if(samplingInterval >= 500)
+  {
+    sleep_mode = SLEEP_500MS;
+    sleep_time = 500;
+  }   
+  else if(samplingInterval >= 250)
+  {
+    sleep_mode = SLEEP_250MS;
+    sleep_time = 250;
+  }
+  else if(samplingInterval >= 120)
+  {
+    sleep_mode = SLEEP_120MS;
+    sleep_time = 120;
+  }
+  else if(samplingInterval >= 60)
+  {
+    sleep_mode = SLEEP_60MS;
+    sleep_time = 60;
+  }
+  else if(samplingInterval >= 30)
+  {
+    sleep_mode = SLEEP_30MS;
+    sleep_time = 30;
+  }
+  else
+  {
+    sleep_mode = SLEEP_15MS;
+    sleep_time = 15;
+  }
+}
+
+
 void systemResetCallbackFunc(bool init_phase)
 {
   isResetting = true;
@@ -892,6 +951,7 @@ void systemResetCallbackFunc(bool init_phase)
   { 
     // by default, do not report any analog inputs
     analogInputsToReport = 0;
+    
     EEPROM.put(EEPROM_ANALOG_INPUTS_TO_REPORT, (int)0);
     for(int i=0; i<TOTAL_PORTS; i++)
     {
@@ -899,7 +959,17 @@ void systemResetCallbackFunc(bool init_phase)
         EEPROM.update(EEPROM_PORT_CONFIG_INPUTS + i, (byte)0);
         EEPROM.update(EEPROM_PORT_CONFIG_PULL_UPS + i, (byte)0);
     }
-  } 
+    vw_rx_stop();
+    vw_tx_stop();
+    vw_rx_pin = 0;
+    vw_tx_pin = 0;
+    EEPROM.update(EEPROM_VIRTUALWIRE_TX_PIN_ADR, 0);
+    EEPROM.update(EEPROM_VIRTUALWIRE_RX_PIN_ADR, 0);
+    samplingInterval = DEFAULT_SAMPLING_INTERVAL;
+    EEPROM.put(EEPROM_SAMPLING_INTERVAL, samplingInterval);
+  }
+  
+  setSleepMode();
   isResetting = false;
 }
 
@@ -1039,13 +1109,17 @@ void loop()
   byte pin, analogPin;
   int analogData;
   
+  if(blinkMillis && (currentMillis >= blinkMillis + BLINK_INTERVAL))
+  {
+    digitalWrite(BLINK_PIN, LOW);
+    blinkMillis = 0;
+  }
 
   if(!vw_rx_pin && !serial_enabled)
   {
     vw_wait_tx();
-    blink();
-    LowPower.powerDown(SLEEP_250MS, ADC_OFF, BOD_OFF);
-    currentMillis += 250;
+    LowPower.powerDown(sleep_mode, ADC_OFF, BOD_OFF);
+    currentMillis += sleep_time;
   }
   else
     currentMillis = millis();
@@ -1067,12 +1141,7 @@ void loop()
     Firmata.sendString("Disabling serial output");
     serial_enabled = false;
   }
-  if(blinkMillis && (currentMillis > blinkMillis + BLINK_INTERVAL))
-  {
-    digitalWrite(BLINK_PIN, LOW);
-    blinkMillis = 0;
-  }
-  
+ 
  
   if (currentMillis - previousMillis > samplingInterval) {
     previousMillis = currentMillis;
