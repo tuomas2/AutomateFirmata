@@ -31,8 +31,8 @@
 
 TODO
 
- - Test / ensure that PWM works despite power saving if it is being used.
-   
+ - Test / ensure that PWM works despite power saving if it is being used. (pwm should not be used for transmitters, only receivers...)
+ # find a way to configure also to receive immediate notifications about digital sensor value changes 
 */
 
 
@@ -1107,6 +1107,9 @@ void loop()
   byte pin, analogPin;
   int analogData;
   
+  if(!vw_tx_pin) // if vw tx is disabled, send inputs immediately after state change
+     checkDigitalInputs(false);
+  
   if(blinkMillis && (currentMillis >= blinkMillis + BLINK_INTERVAL))
   {
     digitalWrite(BLINK_PIN, LOW);
@@ -1131,7 +1134,6 @@ void loop()
     lastSerialMillis = currentMillis;
     serial_enabled = true;
   }
-
   // TODO - ensure that Stream buffer doesn't go over 60 bytes
 
   if(serial_enabled && currentMillis - lastSerialMillis > SERIAL_SHUTDOWN_TIME)
@@ -1140,13 +1142,10 @@ void loop()
     serial_enabled = false;
   }
  
- 
-  if (currentMillis - previousMillis > samplingInterval) {
+  if (currentMillis - previousMillis >= samplingInterval) {
     previousMillis = currentMillis;
-    /* DIGITALREAD - as fast as possible, check for changes and output them to the
-     * FTDI buffer using Serial.print()  */
-    checkDigitalInputs((bool)vw_tx_pin);
-    /* ANALOGREAD - do all analogReads() at the configured sampling interval */
+    if(vw_tx_pin)
+        checkDigitalInputs(true);
     for (pin = 0; pin < TOTAL_PINS; pin++) {
       if (IS_PIN_ANALOG(pin) && Firmata.getPinMode(pin) == PIN_MODE_ANALOG) {
         analogPin = PIN_TO_ANALOG(pin);
@@ -1165,7 +1164,9 @@ void loop()
       }
     }
   }
-  readVirtualWire(); 
+  if(vw_rx_pin)
+    readVirtualWire(); 
+
 #ifdef FIRMATA_SERIAL_FEATURE
   serialFeature.update();
 #endif
