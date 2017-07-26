@@ -1151,7 +1151,6 @@ void loop()
 
   if(serial_enabled && currentMillis - lastSerialMillis > SERIAL_SHUTDOWN_TIME)
   {
-    Firmata.sendString("Disabling serial output");
     serial_enabled = false;
   }
  
