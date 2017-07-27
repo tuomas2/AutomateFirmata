@@ -1,3 +1,9 @@
+#include <Firmata.h>
+#include <EEPROM.h>
+#include <Wire.h>
+#include <LowPower.h>
+#include <VirtualWire.h>
+
 /*
 
   AutomateFirmata. Firmata with some additional features for Automate 
@@ -33,17 +39,11 @@ TODO
 
  - Test high frequency PWM 
  - Test power saving (measurements)
- - test Automate with StandardFirmata
- - configurable baud rate
+ - Make sure output settings are properly saved (pwm modes etc) and 
+   reloaded after booting
 
 */
 
-
-#include <VirtualWire.h>
-#include <Wire.h>
-#include <Firmata.h>
-#include <EEPROM.h>
-#include <LowPower.h>
 
 #define I2C_WRITE                   B00000000
 #define I2C_READ                    B00001000
