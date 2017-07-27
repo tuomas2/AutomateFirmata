@@ -34,6 +34,7 @@ TODO
  - Test high frequency PWM 
  - Test power saving (measurements)
  - test Automate with StandardFirmata
+ - configurable baud rate
 
 */
 
@@ -59,10 +60,10 @@ TODO
 // the minimum interval for sampling analog input
 #define MINIMUM_SAMPLING_INTERVAL   1
 #define DEFAULT_SAMPLING_INTERVAL 500
+#define DEFAULT_VIRTUALWIRE_SPEED 2
 #define BLINK_INTERVAL 0
 #define BLINK_PIN 13
 #define SERIAL_SHUTDOWN_TIME 120000 // 2 minutes
-#define VIRTUALWIRE_BAUDRATE 2000 
 
 // VirtualWire.h does not export this but we need it.
 extern "C"
@@ -83,6 +84,7 @@ uint8_t device_id = 0x01; // Set this individual within your home
 uint8_t vw_ptt_pin = 0;
 uint8_t vw_rx_pin = 0; // 0 disabled, otherwise pin number
 uint8_t vw_tx_pin = 0;
+uint8_t virtualwire_speed = DEFAULT_VIRTUALWIRE_SPEED; // * 1000 bits per second 
 
 boolean serial_enabled = true;
 
@@ -119,7 +121,7 @@ static const int EEPROM_ANALOG_INPUTS_TO_REPORT = 7; // 2 byte
 static const int EEPROM_DIGITAL_INPUTS_TO_REPORT = 10; // size required: TOTAL_PORTS x 1 byte
 static const int EEPROM_PORT_CONFIG_INPUTS = 30; // size required: TOTAL_PORTS x 1 byte
 static const int EEPROM_PORT_CONFIG_PULL_UPS = 50; // size required: TOTAL_PORTS x 1 byte
-
+static const int EEPROM_VIRTUALWIRE_SPEED_ADR = 80; // 1 byte
 
 #ifdef FIRMATA_SERIAL_FEATURE
 SerialFirmata serialFeature;
@@ -496,6 +498,12 @@ void setPinModeCallback(byte pin, int mode)
 
 void configureVirtualWire()
 {
+
+  if(virtualwire_speed < 1 || virtualwire_speed > 9)
+  {
+    Firmata.sendString("Invalid virtualwire_speed, resetting to default");
+    virtualwire_speed = DEFAULT_VIRTUALWIRE_SPEED;
+  }
   vw_rx_stop();
   vw_tx_stop();
   if(vw_rx_pin)
@@ -504,10 +512,12 @@ void configureVirtualWire()
       vw_set_tx_pin(vw_tx_pin);
   if(vw_ptt_pin)
       vw_set_ptt_pin(vw_ptt_pin);
-  if(vw_tx_pin || vw_rx_pin)
-     vw_setup(VIRTUALWIRE_BAUDRATE);
-  if(vw_rx_pin)
-      vw_rx_start();
+  if(virtualwire_speed && (vw_tx_pin || vw_rx_pin))
+  {
+     vw_setup(1000*virtualwire_speed);
+     if(vw_rx_pin)
+        vw_rx_start();
+  }
  }
 
 /*
@@ -643,9 +653,11 @@ void sysexCallback(byte command, byte argc, byte *argv)
         vw_rx_pin = argv[0];
         vw_tx_pin = argv[1];
         vw_ptt_pin = argv[2];
+        virtualwire_speed = argv[3];
         EEPROM.update(EEPROM_VIRTUALWIRE_RX_PIN_ADR, vw_rx_pin);
         EEPROM.update(EEPROM_VIRTUALWIRE_TX_PIN_ADR, vw_tx_pin);
         EEPROM.update(EEPROM_VIRTUALWIRE_PTT_PIN_ADR, vw_ptt_pin);
+        EEPROM.update(EEPROM_VIRTUALWIRE_SPEED_ADR, virtualwire_speed);
         configureVirtualWire();
         break;
     case SYSEX_VIRTUALWIRE_MESSAGE:
@@ -970,10 +982,13 @@ void systemResetCallbackFunc(bool init_phase)
     vw_rx_pin = 0;
     vw_tx_pin = 0;
     vw_ptt_pin = 0;
-    EEPROM.update(EEPROM_VIRTUALWIRE_TX_PIN_ADR, 0);
-    EEPROM.update(EEPROM_VIRTUALWIRE_RX_PIN_ADR, 0);
-    EEPROM.update(EEPROM_VIRTUALWIRE_PTT_PIN_ADR, 0);
+    virtualwire_speed = DEFAULT_VIRTUALWIRE_SPEED;
     samplingInterval = DEFAULT_SAMPLING_INTERVAL;
+    
+    EEPROM.update(EEPROM_VIRTUALWIRE_TX_PIN_ADR, vw_tx_pin);
+    EEPROM.update(EEPROM_VIRTUALWIRE_RX_PIN_ADR, vw_rx_pin);
+    EEPROM.update(EEPROM_VIRTUALWIRE_PTT_PIN_ADR, vw_ptt_pin);
+    EEPROM.update(EEPROM_VIRTUALWIRE_SPEED_ADR, virtualwire_speed);
     EEPROM.put(EEPROM_SAMPLING_INTERVAL, samplingInterval);
   }
   
@@ -1052,7 +1067,7 @@ void readEepromConfig()
   vw_rx_pin = EEPROM.read(EEPROM_VIRTUALWIRE_RX_PIN_ADR);
   vw_tx_pin = EEPROM.read(EEPROM_VIRTUALWIRE_TX_PIN_ADR);
   vw_ptt_pin = EEPROM.read(EEPROM_VIRTUALWIRE_PTT_PIN_ADR);
-  
+  virtualwire_speed = EEPROM.read(EEPROM_VIRTUALWIRE_SPEED_ADR);
   configureVirtualWire();
 
   EEPROM.get(EEPROM_ANALOG_INPUTS_TO_REPORT, analogInputsToReport);
