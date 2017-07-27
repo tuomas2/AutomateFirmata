@@ -95,11 +95,9 @@ static const int BROADCAST_RECIPIENT = 0xFF;
 static const uint8_t HEADER_LENGTH = 4;
 
 // Incoming sysexs (0x00-0x0F are user defined according to FirmataConstants.h, let's use those)
-static const byte SYSEX_VIRTUALWIRE_MESSAGE = 0x01; // incoming and outgoing
-static const byte SYSEX_SET_IDENTIFICATION = 0x02;
-static const byte SYSEX_KEEP_ALIVE = 0x03;
-static const byte SYSEX_SETUP_VIRTUALWIRE = 0x04;
-
+static const byte SYSEX_VIRTUALWIRE_MESSAGE = 0x00; // incoming and outgoing
+static const byte SYSEX_KEEP_ALIVE = 0x01;
+static const byte SYSEX_SETUP_VIRTUALWIRE = 0x02;
 
 // Virtualwire command bytes
 static const byte VIRTUALWIRE_SET_PIN_MODE = 0x01;
@@ -654,21 +652,20 @@ void sysexCallback(byte command, byte argc, byte *argv)
         vw_tx_pin = argv[1];
         vw_ptt_pin = argv[2];
         virtualwire_speed = argv[3];
+        home_id = argv[4];
+        device_id = argv[5];
+
         EEPROM.update(EEPROM_VIRTUALWIRE_RX_PIN_ADR, vw_rx_pin);
         EEPROM.update(EEPROM_VIRTUALWIRE_TX_PIN_ADR, vw_tx_pin);
         EEPROM.update(EEPROM_VIRTUALWIRE_PTT_PIN_ADR, vw_ptt_pin);
         EEPROM.update(EEPROM_VIRTUALWIRE_SPEED_ADR, virtualwire_speed);
+        EEPROM.update(EEPROM_HOME_ID_ADR, home_id);
+        EEPROM.update(EEPROM_DEVICE_ID_ADR, device_id);
         configureVirtualWire();
         break;
     case SYSEX_VIRTUALWIRE_MESSAGE:
         blink();
         vw_send(argv, argc);
-        break;
-    case SYSEX_SET_IDENTIFICATION:
-        home_id = argv[0];
-        device_id = argv[1];
-        EEPROM.update(EEPROM_HOME_ID_ADR, home_id);
-        EEPROM.update(EEPROM_DEVICE_ID_ADR, device_id);
         break;
     case I2C_REQUEST:
       mode = argv[1] & I2C_READ_WRITE_MODE_MASK;
