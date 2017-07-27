@@ -110,17 +110,17 @@ static const byte VIRTUALWIRE_DIGITAL_BROADCAST = 0x06;
 static const byte VIRTUALWIRE_ANALOG_BROADCAST = 0x07;
 
 // EEPROM addressses
-static const int EEPROM_HOME_ID_ADR = 0;
-static const int EEPROM_DEVICE_ID_ADR = 1;
-static const int EEPROM_VIRTUALWIRE_RX_PIN_ADR = 2;
-static const int EEPROM_VIRTUALWIRE_TX_PIN_ADR = 3;
-static const int EEPROM_VIRTUALWIRE_PTT_PIN_ADR = 4;
-static const int EEPROM_VIRTUALWIRE_SPEED_ADR = 5;
-static const int EEPROM_SAMPLING_INTERVAL = 6; // 2 bytes // TODO add _ADR to these names
+static const int EEPROM_HOME_ID = 0;
+static const int EEPROM_DEVICE_ID = 1;
+static const int EEPROM_VIRTUALWIRE_RX_PIN = 2;
+static const int EEPROM_VIRTUALWIRE_TX_PIN = 3;
+static const int EEPROM_VIRTUALWIRE_PTT_PIN = 4;
+static const int EEPROM_VIRTUALWIRE_SPEED = 5;
+static const int EEPROM_SAMPLING_INTERVAL = 6; // 2 bytes 
 static const int EEPROM_ANALOG_INPUTS_TO_REPORT = 8; // 2 byte
 static const int EEPROM_DIGITAL_INPUTS_TO_REPORT = 10; // size required: TOTAL_PORTS x 1 byte
 static const int EEPROM_PORT_CONFIG_INPUTS = 30; // size required: TOTAL_PORTS x 1 byte
-static const int EEPROM_PIN_MODES_ADR = 81; // TOTAL_PINS x 2 bytes
+static const int EEPROM_PIN_MODES = 81; // TOTAL_PINS x 2 bytes
 
 #ifdef FIRMATA_SERIAL_FEATURE
 SerialFirmata serialFeature;
@@ -481,7 +481,7 @@ void setPinModeCallback(byte pin, int mode)
       Firmata.sendString("Unknown pin mode");
       return;
   }
-  EEPROM.put(EEPROM_PIN_MODES_ADR + 2*pin, mode);
+  EEPROM.put(EEPROM_PIN_MODES + 2*pin, mode);
 }
 
 void configureVirtualWire()
@@ -645,12 +645,12 @@ void sysexCallback(byte command, byte argc, byte *argv)
         home_id = argv[4];
         device_id = argv[5];
 
-        EEPROM.update(EEPROM_VIRTUALWIRE_RX_PIN_ADR, vw_rx_pin);
-        EEPROM.update(EEPROM_VIRTUALWIRE_TX_PIN_ADR, vw_tx_pin);
-        EEPROM.update(EEPROM_VIRTUALWIRE_PTT_PIN_ADR, vw_ptt_pin);
-        EEPROM.update(EEPROM_VIRTUALWIRE_SPEED_ADR, virtualwire_speed);
-        EEPROM.update(EEPROM_HOME_ID_ADR, home_id);
-        EEPROM.update(EEPROM_DEVICE_ID_ADR, device_id);
+        EEPROM.update(EEPROM_VIRTUALWIRE_RX_PIN, vw_rx_pin);
+        EEPROM.update(EEPROM_VIRTUALWIRE_TX_PIN, vw_tx_pin);
+        EEPROM.update(EEPROM_VIRTUALWIRE_PTT_PIN, vw_ptt_pin);
+        EEPROM.update(EEPROM_VIRTUALWIRE_SPEED, virtualwire_speed);
+        EEPROM.update(EEPROM_HOME_ID, home_id);
+        EEPROM.update(EEPROM_DEVICE_ID, device_id);
         configureVirtualWire();
         break;
     case SYSEX_VIRTUALWIRE_MESSAGE:
@@ -971,10 +971,10 @@ void systemResetCallbackFunc(bool init_phase)
     virtualwire_speed = DEFAULT_VIRTUALWIRE_SPEED;
     samplingInterval = DEFAULT_SAMPLING_INTERVAL;
     
-    EEPROM.update(EEPROM_VIRTUALWIRE_TX_PIN_ADR, vw_tx_pin);
-    EEPROM.update(EEPROM_VIRTUALWIRE_RX_PIN_ADR, vw_rx_pin);
-    EEPROM.update(EEPROM_VIRTUALWIRE_PTT_PIN_ADR, vw_ptt_pin);
-    EEPROM.update(EEPROM_VIRTUALWIRE_SPEED_ADR, virtualwire_speed);
+    EEPROM.update(EEPROM_VIRTUALWIRE_TX_PIN, vw_tx_pin);
+    EEPROM.update(EEPROM_VIRTUALWIRE_RX_PIN, vw_rx_pin);
+    EEPROM.update(EEPROM_VIRTUALWIRE_PTT_PIN, vw_ptt_pin);
+    EEPROM.update(EEPROM_VIRTUALWIRE_SPEED, virtualwire_speed);
     EEPROM.put(EEPROM_SAMPLING_INTERVAL, samplingInterval);
   }
   
@@ -1047,19 +1047,19 @@ inline void readVirtualWire()
     
 void readEepromConfig()
 {
-  home_id = EEPROM.read(EEPROM_HOME_ID_ADR);
-  device_id = EEPROM.read(EEPROM_DEVICE_ID_ADR);
+  home_id = EEPROM.read(EEPROM_HOME_ID);
+  device_id = EEPROM.read(EEPROM_DEVICE_ID);
   EEPROM.get(EEPROM_SAMPLING_INTERVAL, samplingInterval);
-  vw_rx_pin = EEPROM.read(EEPROM_VIRTUALWIRE_RX_PIN_ADR);
-  vw_tx_pin = EEPROM.read(EEPROM_VIRTUALWIRE_TX_PIN_ADR);
-  vw_ptt_pin = EEPROM.read(EEPROM_VIRTUALWIRE_PTT_PIN_ADR);
-  virtualwire_speed = EEPROM.read(EEPROM_VIRTUALWIRE_SPEED_ADR);
+  vw_rx_pin = EEPROM.read(EEPROM_VIRTUALWIRE_RX_PIN);
+  vw_tx_pin = EEPROM.read(EEPROM_VIRTUALWIRE_TX_PIN);
+  vw_ptt_pin = EEPROM.read(EEPROM_VIRTUALWIRE_PTT_PIN);
+  virtualwire_speed = EEPROM.read(EEPROM_VIRTUALWIRE_SPEED);
   for(int i=0; i<TOTAL_PINS; i++)
   {
     if(IS_PIN_DIGITAL(i) || IS_PIN_ANALOG(i))
     {
       int mode;
-      EEPROM.get(EEPROM_PIN_MODES_ADR + 2*i, mode);
+      EEPROM.get(EEPROM_PIN_MODES + 2*i, mode);
       setPinModeCallback(i, mode);
     }
   }
