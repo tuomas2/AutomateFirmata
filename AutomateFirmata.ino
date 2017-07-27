@@ -40,8 +40,8 @@ TODO
  - Test high frequency PWM 
  - Test power saving (measurements)
  - Power saving by disabling AD converter if ports not used
- - Make sure output settings are properly saved (pwm modes etc) and 
-   reloaded after booting
+ - consider saving output pin states to EEPROM too.
+   Drawback: this would cause *a lot* of writing and might be slow.
 
 */
 
