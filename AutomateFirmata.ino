@@ -78,19 +78,19 @@ extern "C"
 
 char tmpbuf[128];
 
-uint8_t home_id = 0x01; // Set this different to your neighbors 
-uint8_t device_id = 0x01; // Set this individual within your home
+uint8_t homeId = 0x01; // Set this different to your neighbors 
+uint8_t deviceId = 0x01; // Set this individual within your home
 
-uint8_t vw_ptt_pin = 0;
-uint8_t vw_rx_pin = 0; // 0 disabled, otherwise pin number
-uint8_t vw_tx_pin = 0;
-uint8_t wakeup_pin = 0; // 2 or 3
-uint8_t virtualwire_speed = DEFAULT_VIRTUALWIRE_SPEED; // * 1000 bits per second 
+uint8_t vwPttPin = 0;
+uint8_t vwRxPin = 0; // 0 disabled, otherwise pin number
+uint8_t vwTxPin = 0;
+uint8_t wakeUpPin = 0; // 2 or 3
+uint8_t virtualWireSpeed = DEFAULT_VIRTUALWIRE_SPEED; // * 1000 bits per second 
 
-boolean serial_enabled = true;
+boolean serialEnabled = true;
 
-period_t sleep_mode = SLEEP_1S;
-int sleep_time = 1000;
+period_t sleepMode = SLEEP_1S;
+int sleepTime = 1000;
 
 static const int BROADCAST_RECIPIENT = 0xFF;
 static const uint8_t HEADER_LENGTH = 4;
@@ -320,12 +320,12 @@ void readAndReportData(byte address, int theRegister, byte numBytes, byte stopTX
 
 void sendVirtualWireDigitalOutput(byte portNumber, byte portValue)
 {
-   if(!vw_tx_pin)
+   if(!vwTxPin)
       return;
 
    byte data[6];
-   data[0] = home_id; 
-   data[1] = device_id; // sender
+   data[0] = homeId; 
+   data[1] = deviceId; // sender
    data[2] = BROADCAST_RECIPIENT;
    data[3] = VIRTUALWIRE_DIGITAL_BROADCAST; 
    data[4] = portNumber;
@@ -336,12 +336,12 @@ void sendVirtualWireDigitalOutput(byte portNumber, byte portValue)
 
 void sendVirtualWireAnalogOutput(byte pinNumber, int analogData)
 {
-   if(!vw_tx_pin)
+   if(!vwTxPin)
       return;
 
    byte data[7];
-   data[0] = home_id; 
-   data[1] = device_id; // sender
+   data[0] = homeId; 
+   data[1] = deviceId; // sender
    data[2] = BROADCAST_RECIPIENT;
    data[3] = VIRTUALWIRE_ANALOG_BROADCAST; 
    data[4] = pinNumber;
@@ -357,7 +357,7 @@ void outputPort(byte portNumber, byte portValue, byte forceSend)
   portValue = portValue & portConfigInputs[portNumber];
   // only send if the value is different than previously sent
   if (forceSend || previousPINs[portNumber] != portValue) {
-    if(serial_enabled)
+    if(serialEnabled)
         Firmata.sendDigitalPort(portNumber, portValue);
     previousPINs[portNumber] = portValue;
     sendVirtualWireDigitalOutput(portNumber, portValue);
@@ -488,25 +488,25 @@ void setPinModeCallback(byte pin, int mode)
 void configureVirtualWire()
 {
 
-  if(virtualwire_speed < 1 || virtualwire_speed > 9)
+  if(virtualWireSpeed < 1 || virtualWireSpeed > 9)
   {
-    Firmata.sendString("Invalid virtualwire_speed, resetting to default");
-    virtualwire_speed = DEFAULT_VIRTUALWIRE_SPEED;
+    Firmata.sendString("Invalid virtualWireSpeed, resetting to default");
+    virtualWireSpeed = DEFAULT_VIRTUALWIRE_SPEED;
   }
   vw_rx_stop();
   vw_tx_stop();
-  if(vw_rx_pin)
-      vw_set_rx_pin(vw_rx_pin);
-  if(vw_tx_pin)
-      vw_set_tx_pin(vw_tx_pin);
-  if(vw_ptt_pin)
-      vw_set_ptt_pin(vw_ptt_pin);
-  if(!(portConfigInputs[wakeup_pin/8] && (1<<wakeup_pin))) // if not already configured as input 
-      pinMode(wakeup_pin, INPUT);
-  if(virtualwire_speed && (vw_tx_pin || vw_rx_pin))
+  if(vwRxPin)
+      vw_set_rx_pin(vwRxPin);
+  if(vwTxPin)
+      vw_set_tx_pin(vwTxPin);
+  if(vwPttPin)
+      vw_set_ptt_pin(vwPttPin);
+  if(!(portConfigInputs[wakeUpPin/8] && (1<<wakeUpPin))) // if not already configured as input 
+      pinMode(wakeUpPin, INPUT);
+  if(virtualWireSpeed && (vwTxPin || vwRxPin))
   {
-     vw_setup(1000*virtualwire_speed);
-     if(vw_rx_pin)
+     vw_setup(1000*virtualWireSpeed);
+     if(vwRxPin)
         vw_rx_start();
   }
  }
@@ -595,7 +595,7 @@ void reportAnalogCallback(byte analogPin, int value)
         // ethernet, wi-fi or bluetooth so pin states can be known upon
         // reconnecting.
         analogData = analogRead(analogPin);
-        if(serial_enabled)
+        if(serialEnabled)
             Firmata.sendAnalog(analogPin, analogData);
         sendVirtualWireAnalogOutput(analogPin, analogData);
       }
@@ -641,21 +641,21 @@ void sysexCallback(byte command, byte argc, byte *argv)
     case SYSEX_KEEP_ALIVE:
         break;
     case SYSEX_SETUP_VIRTUALWIRE:
-        vw_rx_pin = argv[0];
-        vw_tx_pin = argv[1];
-        vw_ptt_pin = argv[2];
-        wakeup_pin = argv[3],
-        virtualwire_speed = argv[4];
-        home_id = argv[5];
-        device_id = argv[6];
+        vwRxPin = argv[0];
+        vwTxPin = argv[1];
+        vwPttPin = argv[2];
+        wakeUpPin = argv[3],
+        virtualWireSpeed = argv[4];
+        homeId = argv[5];
+        deviceId = argv[6];
 
-        EEPROM.update(EEPROM_VIRTUALWIRE_RX_PIN, vw_rx_pin);
-        EEPROM.update(EEPROM_VIRTUALWIRE_TX_PIN, vw_tx_pin);
-        EEPROM.update(EEPROM_VIRTUALWIRE_PTT_PIN, vw_ptt_pin);
-        EEPROM.update(EEPROM_WAKEUP_PIN, wakeup_pin);
-        EEPROM.update(EEPROM_VIRTUALWIRE_SPEED, virtualwire_speed);
-        EEPROM.update(EEPROM_HOME_ID, home_id);
-        EEPROM.update(EEPROM_DEVICE_ID, device_id);
+        EEPROM.update(EEPROM_VIRTUALWIRE_RX_PIN, vwRxPin);
+        EEPROM.update(EEPROM_VIRTUALWIRE_TX_PIN, vwTxPin);
+        EEPROM.update(EEPROM_VIRTUALWIRE_PTT_PIN, vwPttPin);
+        EEPROM.update(EEPROM_WAKEUP_PIN, wakeUpPin);
+        EEPROM.update(EEPROM_VIRTUALWIRE_SPEED, virtualWireSpeed);
+        EEPROM.update(EEPROM_HOME_ID, homeId);
+        EEPROM.update(EEPROM_DEVICE_ID, deviceId);
         configureVirtualWire();
         break;
     case SYSEX_VIRTUALWIRE_MESSAGE:
@@ -862,53 +862,53 @@ void setSleepMode()
 {
   if(samplingInterval >= 8000) 
   {
-    sleep_mode = SLEEP_8S;
-    sleep_time = 8000;
+    sleepMode = SLEEP_8S;
+    sleepTime = 8000;
   }
   else if(samplingInterval >= 4000)
   {
-    sleep_mode = SLEEP_4S;
-    sleep_time = 4000;
+    sleepMode = SLEEP_4S;
+    sleepTime = 4000;
   }
   else if(samplingInterval >= 2000)
   {
-    sleep_mode = SLEEP_2S;
-    sleep_time = 2000;
+    sleepMode = SLEEP_2S;
+    sleepTime = 2000;
   }
   else if(samplingInterval >= 1000)
   {
-    sleep_mode = SLEEP_1S;
-    sleep_time = 1000;
+    sleepMode = SLEEP_1S;
+    sleepTime = 1000;
   }
   else if(samplingInterval >= 500)
   {
-    sleep_mode = SLEEP_500MS;
-    sleep_time = 500;
+    sleepMode = SLEEP_500MS;
+    sleepTime = 500;
   }   
   else if(samplingInterval >= 250)
   {
-    sleep_mode = SLEEP_250MS;
-    sleep_time = 250;
+    sleepMode = SLEEP_250MS;
+    sleepTime = 250;
   }
   else if(samplingInterval >= 120)
   {
-    sleep_mode = SLEEP_120MS;
-    sleep_time = 120;
+    sleepMode = SLEEP_120MS;
+    sleepTime = 120;
   }
   else if(samplingInterval >= 60)
   {
-    sleep_mode = SLEEP_60MS;
-    sleep_time = 60;
+    sleepMode = SLEEP_60MS;
+    sleepTime = 60;
   }
   else if(samplingInterval >= 30)
   {
-    sleep_mode = SLEEP_30MS;
-    sleep_time = 30;
+    sleepMode = SLEEP_30MS;
+    sleepTime = 30;
   }
   else
   {
-    sleep_mode = SLEEP_15MS;
-    sleep_time = 15;
+    sleepMode = SLEEP_15MS;
+    sleepTime = 15;
   }
 }
 
@@ -957,18 +957,18 @@ void systemResetCallbackFunc(bool init_phase)
 
     vw_rx_stop();
     vw_tx_stop();
-    vw_rx_pin = 0;
-    vw_tx_pin = 0;
-    vw_ptt_pin = 0;
-    wakeup_pin = 0;
-    virtualwire_speed = DEFAULT_VIRTUALWIRE_SPEED;
+    vwRxPin = 0;
+    vwTxPin = 0;
+    vwPttPin = 0;
+    wakeUpPin = 0;
+    virtualWireSpeed = DEFAULT_VIRTUALWIRE_SPEED;
     samplingInterval = DEFAULT_SAMPLING_INTERVAL;
     
-    EEPROM.update(EEPROM_VIRTUALWIRE_TX_PIN, vw_tx_pin);
-    EEPROM.update(EEPROM_VIRTUALWIRE_RX_PIN, vw_rx_pin);
-    EEPROM.update(EEPROM_VIRTUALWIRE_PTT_PIN, vw_ptt_pin);
-    EEPROM.update(EEPROM_WAKEUP_PIN, wakeup_pin);
-    EEPROM.update(EEPROM_VIRTUALWIRE_SPEED, virtualwire_speed);
+    EEPROM.update(EEPROM_VIRTUALWIRE_TX_PIN, vwTxPin);
+    EEPROM.update(EEPROM_VIRTUALWIRE_RX_PIN, vwRxPin);
+    EEPROM.update(EEPROM_VIRTUALWIRE_PTT_PIN, vwPttPin);
+    EEPROM.update(EEPROM_WAKEUP_PIN, wakeUpPin);
+    EEPROM.update(EEPROM_VIRTUALWIRE_SPEED, virtualWireSpeed);
     EEPROM.put(EEPROM_SAMPLING_INTERVAL, samplingInterval);
   }
   
@@ -995,15 +995,15 @@ inline void readVirtualWire()
   {
     if (buflen < HEADER_LENGTH + 1) return; // our headers and at least 1 bytes of data
     
-    uint8_t home_address = buf[0];
-    uint8_t sender_address = buf[1];
-    uint8_t recipient_address = buf[2];
+    uint8_t homeAddress = buf[0];
+    uint8_t senderAddress = buf[1];
+    uint8_t recipientAddress = buf[2];
     uint8_t command = buf[3];
 
     uint8_t *arg1 = &buf[4];
     uint8_t *arg2 = &buf[5];
     // check correct address and ignore if not ours
-    if (home_address == home_id && (recipient_address == device_id || recipient_address == BROADCAST_RECIPIENT))
+    if (homeAddress == homeId && (recipientAddress == deviceId || recipientAddress == BROADCAST_RECIPIENT))
     {
       switch(command) {
         case VIRTUALWIRE_SET_PIN_MODE:
@@ -1023,11 +1023,11 @@ inline void readVirtualWire()
           break;
         case VIRTUALWIRE_DIGITAL_BROADCAST:
         case VIRTUALWIRE_ANALOG_BROADCAST:
-          if(serial_enabled)
+          if(serialEnabled)
           {
             Firmata.write(START_SYSEX);
             Firmata.write(SYSEX_VIRTUALWIRE_MESSAGE);
-            Firmata.write(sender_address);
+            Firmata.write(senderAddress);
             Firmata.write(command);
             for(int i=0; i < buflen - HEADER_LENGTH; i++)
                 Firmata.write(arg1[i]);
@@ -1041,14 +1041,14 @@ inline void readVirtualWire()
     
 void readEepromConfig()
 {
-  home_id = EEPROM.read(EEPROM_HOME_ID);
-  device_id = EEPROM.read(EEPROM_DEVICE_ID);
+  homeId = EEPROM.read(EEPROM_HOME_ID);
+  deviceId = EEPROM.read(EEPROM_DEVICE_ID);
   EEPROM.get(EEPROM_SAMPLING_INTERVAL, samplingInterval);
-  vw_rx_pin = EEPROM.read(EEPROM_VIRTUALWIRE_RX_PIN);
-  vw_tx_pin = EEPROM.read(EEPROM_VIRTUALWIRE_TX_PIN);
-  vw_ptt_pin = EEPROM.read(EEPROM_VIRTUALWIRE_PTT_PIN);
-  wakeup_pin = EEPROM.read(EEPROM_WAKEUP_PIN);
-  virtualwire_speed = EEPROM.read(EEPROM_VIRTUALWIRE_SPEED);
+  vwRxPin = EEPROM.read(EEPROM_VIRTUALWIRE_RX_PIN);
+  vwTxPin = EEPROM.read(EEPROM_VIRTUALWIRE_TX_PIN);
+  vwPttPin = EEPROM.read(EEPROM_VIRTUALWIRE_PTT_PIN);
+  wakeUpPin = EEPROM.read(EEPROM_WAKEUP_PIN);
+  virtualWireSpeed = EEPROM.read(EEPROM_VIRTUALWIRE_SPEED);
   for(int i=0; i<TOTAL_PINS; i++)
     if(IS_PIN_DIGITAL(i) || IS_PIN_ANALOG(i))
       setPinModeCallback(i, EEPROM.read(EEPROM_PIN_MODES + i));
@@ -1106,7 +1106,7 @@ void loop()
   byte pin, analogPin;
   int analogData;
   
-  if(!vw_tx_pin || wakeup_pin)
+  if(!vwTxPin || wakeUpPin)
      checkDigitalInputs(false);
   
   if(blinkMillis && (currentMillis >= blinkMillis + BLINK_INTERVAL))
@@ -1115,15 +1115,15 @@ void loop()
     blinkMillis = 0;
   }
 
-  if(!vw_rx_pin && !serial_enabled)
+  if(!vwRxPin && !serialEnabled)
   {
     vw_wait_tx();
-    if(wakeup_pin)
+    if(wakeUpPin)
         attachInterrupt(0, wakeUp, CHANGE);
-    LowPower.powerDown(sleep_mode, ADC_OFF, BOD_OFF);
-    if(wakeup_pin)
+    LowPower.powerDown(sleepMode, ADC_OFF, BOD_OFF);
+    if(wakeUpPin)
         detachInterrupt(0);
-    currentMillis += sleep_time;
+    currentMillis += sleepTime;
   }
   else
     currentMillis = millis();
@@ -1135,23 +1135,23 @@ void loop()
   {
     Firmata.processInput();
     lastSerialMillis = currentMillis;
-    serial_enabled = true;
+    serialEnabled = true;
   }
   // TODO - ensure that Stream buffer doesn't go over 60 bytes
 
-  if(serial_enabled && currentMillis - lastSerialMillis > SERIAL_SHUTDOWN_TIME)
-    serial_enabled = false;
+  if(serialEnabled && currentMillis - lastSerialMillis > SERIAL_SHUTDOWN_TIME)
+    serialEnabled = false;
  
   if (currentMillis - previousMillis >= samplingInterval) {
     previousMillis = currentMillis;
-    if(vw_tx_pin)
+    if(vwTxPin)
         checkDigitalInputs(true);
     for (pin = 0; pin < TOTAL_PINS; pin++) {
       if (IS_PIN_ANALOG(pin) && Firmata.getPinMode(pin) == PIN_MODE_ANALOG) {
         analogPin = PIN_TO_ANALOG(pin);
         if (analogInputsToReport & (1 << analogPin)) {
           analogData = analogRead(analogPin);
-          if(serial_enabled)
+          if(serialEnabled)
              Firmata.sendAnalog(analogPin, analogData);
           sendVirtualWireAnalogOutput(analogPin, analogData);
         }
@@ -1164,7 +1164,7 @@ void loop()
       }
     }
   }
-  if(vw_rx_pin)
+  if(vwRxPin)
     readVirtualWire(); 
 
 #ifdef FIRMATA_SERIAL_FEATURE
