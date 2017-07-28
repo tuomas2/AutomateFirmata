@@ -1126,9 +1126,7 @@ void loop()
   // TODO - ensure that Stream buffer doesn't go over 60 bytes
 
   if(serial_enabled && currentMillis - lastSerialMillis > SERIAL_SHUTDOWN_TIME)
-  {
     serial_enabled = false;
-  }
  
   if (currentMillis - previousMillis >= samplingInterval) {
     previousMillis = currentMillis;
