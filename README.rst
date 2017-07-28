@@ -1,8 +1,5 @@
-Firmata sketch for Arduino with additional features to improve co-operation with Automate
-=========================================================================================
-
-See `Automate project <https://github.com/tuomas2/automate>`_ and 
-its `Arduino specific documentation <http://python-automate.readthedocs.io/en/latest/official_extensions/arduino.html>`_.
+Firmata sketch for Arduino with persistent configuration, Virtualwire support and more
+======================================================================================
 
 Interesting features on top of StandardFirmata:
  - Pin modes and other configuration is saved to and read from EEPROM
@@ -26,3 +23,6 @@ Compilation tested to be working fine Arduino IDE version 1.8.3. Tested with Ard
 
 Work is based on StandardFirmata 
 https://github.com/firmata/arduino/blob/master/examples/StandardFirmata/StandardFirmata.ino @ 281b99f  
+
+See `Automate project <https://github.com/tuomas2/automate>`_ and 
+its `Arduino specific documentation <http://python-automate.readthedocs.io/en/latest/official_extensions/arduino.html>`_.
