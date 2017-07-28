@@ -10,8 +10,8 @@
   (https://github.com/tuomas2/automate)
 
   Repository URL: https://github.com/tuomas2/AutomateFirmata
-
-  Based on StandardFirmata.
+  
+  Based on StandardFirmata. 
 
   Firmata is a generic protocol for communicating with microcontrollers
   from software on a host computer. It is intended to work with
@@ -40,11 +40,7 @@ TODO
  - Test high frequency PWM 
  - Test power saving (measurements)
  - Power saving by disabling AD converter if ports not used
- - consider saving output pin states to EEPROM too.
-   Drawback: this would cause *a lot* of writing and might be slow.
  - Make power-saving configurable
- - Make digital sensor sending configurable
- - Check if it is possible to stop power-saving with digital pin HIGH state
 
 */
 
