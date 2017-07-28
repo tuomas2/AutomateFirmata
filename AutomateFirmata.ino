@@ -6,43 +6,43 @@
 
 /*
 
-  AutomateFirmata. Firmata with some additional features for Automate 
-  (https://github.com/tuomas2/automate)
+   AutomateFirmata. Firmata with some additional features for Automate 
+   (https://github.com/tuomas2/automate)
 
-  Repository URL: https://github.com/tuomas2/AutomateFirmata
-  
-  Based on StandardFirmata. 
+   Repository URL: https://github.com/tuomas2/AutomateFirmata
 
-  Firmata is a generic protocol for communicating with microcontrollers
-  from software on a host computer. It is intended to work with
-  any host computer software package.
+   Based on StandardFirmata. 
 
-  To download a host software package, please click on the following link
-  to open the list of Firmata client libraries in your default browser.
+   Firmata is a generic protocol for communicating with microcontrollers
+   from software on a host computer. It is intended to work with
+   any host computer software package.
 
-  https://github.com/firmata/arduino#firmata-client-libraries
+   To download a host software package, please click on the following link
+   to open the list of Firmata client libraries in your default browser.
 
-  Copyright (C) 2006-2008 Hans-Christoph Steiner.  All rights reserved.
-  Copyright (C) 2010-2011 Paul Stoffregen.  All rights reserved.
-  Copyright (C) 2009 Shigeru Kobayashi.  All rights reserved.
-  Copyright (C) 2009-2016 Jeff Hoefs.  All rights reserved.
-  Copyright (C) 2017 Tuomas Airaksinen. All rights reserved.
-
-  This library is free software; you can redistribute it and/or
-  modify it under the terms of the GNU Lesser General Public
-  License as published by the Free Software Foundation; either
-  version 2.1 of the License, or (at your option) any later version.
-
-  See file LICENSE.txt for further informations on licensing terms.
-
-TODO
-
- - Test high frequency PWM 
- - Test power saving (measurements)
- - Power saving by disabling AD converter if ports not used
- - Make power-saving configurable
-
-*/
+   https://github.com/firmata/arduino#firmata-client-libraries
+   
+   Copyright (C) 2006-2008 Hans-Christoph Steiner.  All rights reserved.
+   Copyright (C) 2010-2011 Paul Stoffregen.  All rights reserved.
+   Copyright (C) 2009 Shigeru Kobayashi.  All rights reserved.
+   Copyright (C) 2009-2016 Jeff Hoefs.  All rights reserved.
+   Copyright (C) 2017 Tuomas Airaksinen. All rights reserved.
+   
+   This library is free software; you can redistribute it and/or
+   modify it under the terms of the GNU Lesser General Public
+   License as published by the Free Software Foundation; either
+   version 2.1 of the License, or (at your option) any later version.
+   
+   See file LICENSE.txt for further informations on licensing terms.
+   
+   TODO
+   
+   - Test high frequency PWM 
+   - Test power saving (measurements)
+   - Power saving by disabling AD converter if ports not used
+   - Make power-saving configurable
+   
+ */
 
 
 #define I2C_WRITE                   B00000000
@@ -68,7 +68,7 @@ TODO
 // VirtualWire.h does not export this but we need it.
 extern "C"
 {
-    extern void vw_tx_stop();
+  extern void vw_tx_stop();
 }
 
 /*==============================================================================
@@ -320,35 +320,35 @@ void readAndReportData(byte address, int theRegister, byte numBytes, byte stopTX
 
 void sendVirtualWireDigitalOutput(byte portNumber, byte portValue)
 {
-   if(!vwTxPin)
-      return;
+  if(!vwTxPin)
+    return;
 
-   byte data[6];
-   data[0] = homeId; 
-   data[1] = deviceId; // sender
-   data[2] = BROADCAST_RECIPIENT;
-   data[3] = VIRTUALWIRE_DIGITAL_BROADCAST; 
-   data[4] = portNumber;
-   data[5] = portValue;
-   blink();
-   vw_send(data, sizeof(data));
+  byte data[6];
+  data[0] = homeId; 
+  data[1] = deviceId; // sender
+  data[2] = BROADCAST_RECIPIENT;
+  data[3] = VIRTUALWIRE_DIGITAL_BROADCAST; 
+  data[4] = portNumber;
+  data[5] = portValue;
+  blink();
+  vw_send(data, sizeof(data));
 }
 
 void sendVirtualWireAnalogOutput(byte pinNumber, int analogData)
 {
-   if(!vwTxPin)
-      return;
+  if(!vwTxPin)
+    return;
 
-   byte data[7];
-   data[0] = homeId; 
-   data[1] = deviceId; // sender
-   data[2] = BROADCAST_RECIPIENT;
-   data[3] = VIRTUALWIRE_ANALOG_BROADCAST; 
-   data[4] = pinNumber;
-   data[5] = analogData >> 8; // msb
-   data[6] = analogData;      // lsb
-   blink();
-   vw_send(data, sizeof(data));  
+  byte data[7];
+  data[0] = homeId; 
+  data[1] = deviceId; // sender
+  data[2] = BROADCAST_RECIPIENT;
+  data[3] = VIRTUALWIRE_ANALOG_BROADCAST; 
+  data[4] = pinNumber;
+  data[5] = analogData >> 8; // msb
+  data[6] = analogData;      // lsb
+  blink();
+  vw_send(data, sizeof(data));  
 }
 
 void outputPort(byte portNumber, byte portValue, byte forceSend)
@@ -358,7 +358,7 @@ void outputPort(byte portNumber, byte portValue, byte forceSend)
   // only send if the value is different than previously sent
   if (forceSend || previousPINs[portNumber] != portValue) {
     if(serialEnabled)
-        Firmata.sendDigitalPort(portNumber, portValue);
+      Firmata.sendDigitalPort(portNumber, portValue);
     previousPINs[portNumber] = portValue;
     sendVirtualWireDigitalOutput(portNumber, portValue);
   }
@@ -460,7 +460,7 @@ void setPinModeCallback(byte pin, int mode)
     case PIN_MODE_PWM:
       if (IS_PIN_PWM(pin)) {
         if(PIN_TO_DIGITAL(pin)==3 || PIN_TO_DIGITAL(pin)==11)
-            setPwmFrequency(pin, 1);
+          setPwmFrequency(pin, 1);
         pinMode(PIN_TO_PWM(pin), OUTPUT);
         analogWrite(PIN_TO_PWM(pin), 0);
         Firmata.setPinMode(pin, PIN_MODE_PWM);
@@ -496,20 +496,20 @@ void configureVirtualWire()
   vw_rx_stop();
   vw_tx_stop();
   if(vwRxPin)
-      vw_set_rx_pin(vwRxPin);
+    vw_set_rx_pin(vwRxPin);
   if(vwTxPin)
-      vw_set_tx_pin(vwTxPin);
+    vw_set_tx_pin(vwTxPin);
   if(vwPttPin)
-      vw_set_ptt_pin(vwPttPin);
+    vw_set_ptt_pin(vwPttPin);
   if(!(portConfigInputs[wakeUpPin/8] && (1<<wakeUpPin))) // if not already configured as input 
-      pinMode(wakeUpPin, INPUT);
+    pinMode(wakeUpPin, INPUT);
   if(virtualWireSpeed && (vwTxPin || vwRxPin))
   {
-     vw_setup(1000*virtualWireSpeed);
-     if(vwRxPin)
-        vw_rx_start();
+    vw_setup(1000*virtualWireSpeed);
+    if(vwRxPin)
+      vw_rx_start();
   }
- }
+}
 
 /*
  * Sets the value of an individual pin. Useful if you want to set a pin value but
@@ -596,7 +596,7 @@ void reportAnalogCallback(byte analogPin, int value)
         // reconnecting.
         analogData = analogRead(analogPin);
         if(serialEnabled)
-            Firmata.sendAnalog(analogPin, analogData);
+          Firmata.sendAnalog(analogPin, analogData);
         sendVirtualWireAnalogOutput(analogPin, analogData);
       }
     }
@@ -615,7 +615,7 @@ void reportDigitalCallback(byte port, int value)
     // ethernet, wi-fi or bluetooth so pin states can be known upon
     // reconnecting.
     if (value) outputPort(port, readPort(port, portConfigInputs[port]), true);
-}
+  }
   // do not disable analog reporting on these 8 pins, to allow some
   // pins used for digital, others analog.  Instead, allow both types
   // of reporting to be enabled, but check if the pin is configured
@@ -639,29 +639,29 @@ void sysexCallback(byte command, byte argc, byte *argv)
 
   switch (command) {
     case SYSEX_KEEP_ALIVE:
-        break;
+      break;
     case SYSEX_SETUP_VIRTUALWIRE:
-        vwRxPin = argv[0];
-        vwTxPin = argv[1];
-        vwPttPin = argv[2];
-        wakeUpPin = argv[3],
-        virtualWireSpeed = argv[4];
-        homeId = argv[5];
-        deviceId = argv[6];
+      vwRxPin = argv[0];
+      vwTxPin = argv[1];
+      vwPttPin = argv[2];
+      wakeUpPin = argv[3],
+      virtualWireSpeed = argv[4];
+      homeId = argv[5];
+      deviceId = argv[6];
 
-        EEPROM.update(EEPROM_VIRTUALWIRE_RX_PIN, vwRxPin);
-        EEPROM.update(EEPROM_VIRTUALWIRE_TX_PIN, vwTxPin);
-        EEPROM.update(EEPROM_VIRTUALWIRE_PTT_PIN, vwPttPin);
-        EEPROM.update(EEPROM_WAKEUP_PIN, wakeUpPin);
-        EEPROM.update(EEPROM_VIRTUALWIRE_SPEED, virtualWireSpeed);
-        EEPROM.update(EEPROM_HOME_ID, homeId);
-        EEPROM.update(EEPROM_DEVICE_ID, deviceId);
-        configureVirtualWire();
-        break;
+      EEPROM.update(EEPROM_VIRTUALWIRE_RX_PIN, vwRxPin);
+      EEPROM.update(EEPROM_VIRTUALWIRE_TX_PIN, vwTxPin);
+      EEPROM.update(EEPROM_VIRTUALWIRE_PTT_PIN, vwPttPin);
+      EEPROM.update(EEPROM_WAKEUP_PIN, wakeUpPin);
+      EEPROM.update(EEPROM_VIRTUALWIRE_SPEED, virtualWireSpeed);
+      EEPROM.update(EEPROM_HOME_ID, homeId);
+      EEPROM.update(EEPROM_DEVICE_ID, deviceId);
+      configureVirtualWire();
+      break;
     case SYSEX_VIRTUALWIRE_MESSAGE:
-        blink();
-        vw_send(argv, argc);
-        break;
+      blink();
+      vw_send(argv, argc);
+      break;
     case I2C_REQUEST:
       mode = argv[1] & I2C_READ_WRITE_MODE_MASK;
       if (argv[1] & I2C_10BIT_ADDRESS_MODE_MASK) {
@@ -933,7 +933,7 @@ void systemResetCallbackFunc(bool init_phase)
       reportPINs[i] = false;    // by default, reporting off
       portConfigInputs[i] = 0;  // until activated
       previousPINs[i] = 0;
-      
+
       EEPROM.update(EEPROM_DIGITAL_INPUTS_TO_REPORT + i, (byte)0);
       EEPROM.update(EEPROM_PORT_CONFIG_INPUTS + i, (byte)0);
     }
@@ -952,7 +952,7 @@ void systemResetCallbackFunc(bool init_phase)
     }
 
     analogInputsToReport = 0;
-    
+
     EEPROM.put(EEPROM_ANALOG_INPUTS_TO_REPORT, (int)0);
 
     vw_rx_stop();
@@ -963,7 +963,7 @@ void systemResetCallbackFunc(bool init_phase)
     wakeUpPin = 0;
     virtualWireSpeed = DEFAULT_VIRTUALWIRE_SPEED;
     samplingInterval = DEFAULT_SAMPLING_INTERVAL;
-    
+
     EEPROM.update(EEPROM_VIRTUALWIRE_TX_PIN, vwTxPin);
     EEPROM.update(EEPROM_VIRTUALWIRE_RX_PIN, vwRxPin);
     EEPROM.update(EEPROM_VIRTUALWIRE_PTT_PIN, vwPttPin);
@@ -971,14 +971,14 @@ void systemResetCallbackFunc(bool init_phase)
     EEPROM.update(EEPROM_VIRTUALWIRE_SPEED, virtualWireSpeed);
     EEPROM.put(EEPROM_SAMPLING_INTERVAL, samplingInterval);
   }
-  
+
   setSleepMode();
   isResetting = false;
 }
 
 void systemResetCallback()
 {
-    systemResetCallbackFunc(false);
+  systemResetCallbackFunc(false);
 }
 
 void blink()
@@ -994,7 +994,7 @@ inline void readVirtualWire()
   if (vw_get_message(buf, &buflen))
   {
     if (buflen < HEADER_LENGTH + 1) return; // our headers and at least 1 bytes of data
-    
+
     uint8_t homeAddress = buf[0];
     uint8_t senderAddress = buf[1];
     uint8_t recipientAddress = buf[2];
@@ -1030,15 +1030,15 @@ inline void readVirtualWire()
             Firmata.write(senderAddress);
             Firmata.write(command);
             for(int i=0; i < buflen - HEADER_LENGTH; i++)
-                Firmata.write(arg1[i]);
+              Firmata.write(arg1[i]);
             Firmata.write(END_SYSEX);
           }
           break;
-        }
       }
     }
+  }
 }
-    
+
 void readEepromConfig()
 {
   homeId = EEPROM.read(EEPROM_HOME_ID);
@@ -1052,7 +1052,7 @@ void readEepromConfig()
   for(int i=0; i<TOTAL_PINS; i++)
     if(IS_PIN_DIGITAL(i) || IS_PIN_ANALOG(i))
       setPinModeCallback(i, EEPROM.read(EEPROM_PIN_MODES + i));
-  
+
   for(int port=0; port<TOTAL_PORTS; port++)
   {
     reportPINs[port] = EEPROM.read(EEPROM_DIGITAL_INPUTS_TO_REPORT + port);
@@ -1062,7 +1062,6 @@ void readEepromConfig()
   EEPROM.get(EEPROM_ANALOG_INPUTS_TO_REPORT, analogInputsToReport);
   configureVirtualWire();
 }
-
 
 void setup()
 { 
@@ -1082,33 +1081,30 @@ void setup()
   Firmata.attach(START_SYSEX, sysexCallback);
   Firmata.attach(SYSTEM_RESET, systemResetCallback);
   setPinModeCallback(BLINK_PIN, PIN_MODE_OUTPUT);
-  
-// to use a port other than Serial, such as Serial1 on an Arduino Leonardo or Mega,
-// Call begin(baud) on the alternate serial port and pass it to Firmata to begin like this:
-// Serial1.begin(57600);
-// Firmata.begin(Serial1);
-// However do not do this if you are using SERIAL_MESSAGE
+
+  // to use a port other than Serial, such as Serial1 on an Arduino Leonardo or Mega,
+  // Call begin(baud) on the alternate serial port and pass it to Firmata to begin like this:
+  // Serial1.begin(57600);
+  // Firmata.begin(Serial1);
+  // However do not do this if you are using SERIAL_MESSAGE
   Firmata.begin(57600);
   while (!Serial) {
     ; // wait for serial port to connect. Needed for ATmega32u4-based boards and Arduino 101
   }
-  systemResetCallbackFunc(true);  // reset to default config
+  systemResetCallbackFunc(true);
 }
 
 void wakeUp(){}
 
-/*==============================================================================
- * LOOP()
- *============================================================================*/
 void loop()
 {
-   
+
   byte pin, analogPin;
   int analogData;
-  
+
   if(!vwTxPin || wakeUpPin)
-     checkDigitalInputs(false);
-  
+    checkDigitalInputs(false);
+
   if(blinkMillis && (currentMillis >= blinkMillis + BLINK_INTERVAL))
   {
     digitalWrite(BLINK_PIN, LOW);
@@ -1119,15 +1115,15 @@ void loop()
   {
     vw_wait_tx();
     if(wakeUpPin)
-        attachInterrupt(0, wakeUp, CHANGE);
+      attachInterrupt(0, wakeUp, CHANGE);
     LowPower.powerDown(sleepMode, ADC_OFF, BOD_OFF);
     if(wakeUpPin)
-        detachInterrupt(0);
+      detachInterrupt(0);
     currentMillis += sleepTime;
   }
   else
     currentMillis = millis();
- 
+
 
   /* STREAMREAD - processing incoming messagse as soon as possible, while still
    * checking digital inputs.  */
@@ -1141,18 +1137,18 @@ void loop()
 
   if(serialEnabled && currentMillis - lastSerialMillis > SERIAL_SHUTDOWN_TIME)
     serialEnabled = false;
- 
+
   if (currentMillis - previousMillis >= samplingInterval) {
     previousMillis = currentMillis;
     if(vwTxPin)
-        checkDigitalInputs(true);
+      checkDigitalInputs(true);
     for (pin = 0; pin < TOTAL_PINS; pin++) {
       if (IS_PIN_ANALOG(pin) && Firmata.getPinMode(pin) == PIN_MODE_ANALOG) {
         analogPin = PIN_TO_ANALOG(pin);
         if (analogInputsToReport & (1 << analogPin)) {
           analogData = analogRead(analogPin);
           if(serialEnabled)
-             Firmata.sendAnalog(analogPin, analogData);
+            Firmata.sendAnalog(analogPin, analogData);
           sendVirtualWireAnalogOutput(analogPin, analogData);
         }
       }
