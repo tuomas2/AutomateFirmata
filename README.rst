@@ -21,7 +21,7 @@ Requires the following libraries:
    (see http://www.airspayce.com/mikem/arduino/VirtualWire/)
  - Low-Power: https://github.com/rocketscream/Low-Power (tested at commit 530e8e7)
 
-Compilation tested to be working fine Arduino IDE version 1.8.3.
+Compilation tested to be working fine Arduino IDE version 1.8.3. Tested with Arduino Pro Mini compatible boards.
 
 Work is based on StandardFirmata 
 https://github.com/firmata/arduino/blob/master/examples/StandardFirmata/StandardFirmata.ino @ 281b99f  
