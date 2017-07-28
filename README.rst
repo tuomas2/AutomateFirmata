@@ -1,8 +1,8 @@
 Firmata sketch for Arduino with additional features to improve co-operation with Automate
 =========================================================================================
 
-See Automate at <https://github.com/tuomas2/automate> and 
-`documentation <http://python-automate.readthedocs.io/en/latest/official_extensions/arduino.html>`_.
+See `Automate project <https://github.com/tuomas2/automate>`_ and 
+its `Arduino specific documentation <http://python-automate.readthedocs.io/en/latest/official_extensions/arduino.html>`_.
 
 Interesting features on top of StandardFirmata:
  - Pin modes and other configuration is saved to and read from EEPROM
@@ -10,7 +10,8 @@ Interesting features on top of StandardFirmata:
    (VirtualWire uses Timer1, so don't use PWM on ports 9,11) 
  - Power saving feature when using only VirtualWire transmitter. 
    Configurable wakeup pin.
- - Simple configuration via SysEx message (which `Automate <https://github.com/tuomas2/automate>`_ implements).
+ - Simple configuration via SysEx message 
+   (which `Automate <https://github.com/tuomas2/automate>`_ implements).
 
 Please also note:
  - Servo support removed (conflicts with VirtualWire due to use of Timer1).
