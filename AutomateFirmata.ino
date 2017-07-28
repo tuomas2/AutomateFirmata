@@ -42,6 +42,9 @@ TODO
  - Power saving by disabling AD converter if ports not used
  - consider saving output pin states to EEPROM too.
    Drawback: this would cause *a lot* of writing and might be slow.
+ - Make power-saving configurable
+ - Make digital sensor sending configurable
+ - Check if it is possible to stop power-saving with digital pin HIGH state
 
 */
 
@@ -85,6 +88,7 @@ uint8_t device_id = 0x01; // Set this individual within your home
 uint8_t vw_ptt_pin = 0;
 uint8_t vw_rx_pin = 0; // 0 disabled, otherwise pin number
 uint8_t vw_tx_pin = 0;
+uint8_t wakeup_pin = 0; // 2 or 3
 uint8_t virtualwire_speed = DEFAULT_VIRTUALWIRE_SPEED; // * 1000 bits per second 
 
 boolean serial_enabled = true;
@@ -116,9 +120,10 @@ static const int EEPROM_VIRTUALWIRE_RX_PIN = 2;
 static const int EEPROM_VIRTUALWIRE_TX_PIN = 3;
 static const int EEPROM_VIRTUALWIRE_PTT_PIN = 4;
 static const int EEPROM_VIRTUALWIRE_SPEED = 5;
-static const int EEPROM_SAMPLING_INTERVAL = 6; // 2 bytes 
-static const int EEPROM_ANALOG_INPUTS_TO_REPORT = 8; // 2 byte
-static const int EEPROM_DIGITAL_INPUTS_TO_REPORT = 10; // size required: TOTAL_PORTS x 1 byte
+static const int EEPROM_WAKEUP_PIN = 6;
+static const int EEPROM_SAMPLING_INTERVAL = 7; // 2 bytes 
+static const int EEPROM_ANALOG_INPUTS_TO_REPORT = 9; // 2 byte
+static const int EEPROM_DIGITAL_INPUTS_TO_REPORT = 11; // size required: TOTAL_PORTS x 1 byte
 static const int EEPROM_PORT_CONFIG_INPUTS = 30; // size required: TOTAL_PORTS x 1 byte
 static const int EEPROM_PIN_MODES = 81; // TOTAL_PINS x 1 byte
 
@@ -500,6 +505,8 @@ void configureVirtualWire()
       vw_set_tx_pin(vw_tx_pin);
   if(vw_ptt_pin)
       vw_set_ptt_pin(vw_ptt_pin);
+  if(!(portConfigInputs[wakeup_pin/8] && (1<<wakeup_pin))) // if not already configured as input 
+      pinMode(wakeup_pin, INPUT);
   if(virtualwire_speed && (vw_tx_pin || vw_rx_pin))
   {
      vw_setup(1000*virtualwire_speed);
@@ -641,13 +648,15 @@ void sysexCallback(byte command, byte argc, byte *argv)
         vw_rx_pin = argv[0];
         vw_tx_pin = argv[1];
         vw_ptt_pin = argv[2];
-        virtualwire_speed = argv[3];
-        home_id = argv[4];
-        device_id = argv[5];
+        wakeup_pin = argv[3],
+        virtualwire_speed = argv[4];
+        home_id = argv[5];
+        device_id = argv[6];
 
         EEPROM.update(EEPROM_VIRTUALWIRE_RX_PIN, vw_rx_pin);
         EEPROM.update(EEPROM_VIRTUALWIRE_TX_PIN, vw_tx_pin);
         EEPROM.update(EEPROM_VIRTUALWIRE_PTT_PIN, vw_ptt_pin);
+        EEPROM.update(EEPROM_WAKEUP_PIN, wakeup_pin);
         EEPROM.update(EEPROM_VIRTUALWIRE_SPEED, virtualwire_speed);
         EEPROM.update(EEPROM_HOME_ID, home_id);
         EEPROM.update(EEPROM_DEVICE_ID, device_id);
@@ -955,12 +964,14 @@ void systemResetCallbackFunc(bool init_phase)
     vw_rx_pin = 0;
     vw_tx_pin = 0;
     vw_ptt_pin = 0;
+    wakeup_pin = 0;
     virtualwire_speed = DEFAULT_VIRTUALWIRE_SPEED;
     samplingInterval = DEFAULT_SAMPLING_INTERVAL;
     
     EEPROM.update(EEPROM_VIRTUALWIRE_TX_PIN, vw_tx_pin);
     EEPROM.update(EEPROM_VIRTUALWIRE_RX_PIN, vw_rx_pin);
     EEPROM.update(EEPROM_VIRTUALWIRE_PTT_PIN, vw_ptt_pin);
+    EEPROM.update(EEPROM_WAKEUP_PIN, wakeup_pin);
     EEPROM.update(EEPROM_VIRTUALWIRE_SPEED, virtualwire_speed);
     EEPROM.put(EEPROM_SAMPLING_INTERVAL, samplingInterval);
   }
@@ -1040,6 +1051,7 @@ void readEepromConfig()
   vw_rx_pin = EEPROM.read(EEPROM_VIRTUALWIRE_RX_PIN);
   vw_tx_pin = EEPROM.read(EEPROM_VIRTUALWIRE_TX_PIN);
   vw_ptt_pin = EEPROM.read(EEPROM_VIRTUALWIRE_PTT_PIN);
+  wakeup_pin = EEPROM.read(EEPROM_WAKEUP_PIN);
   virtualwire_speed = EEPROM.read(EEPROM_VIRTUALWIRE_SPEED);
   for(int i=0; i<TOTAL_PINS; i++)
     if(IS_PIN_DIGITAL(i) || IS_PIN_ANALOG(i))
@@ -1087,6 +1099,8 @@ void setup()
   systemResetCallbackFunc(true);  // reset to default config
 }
 
+void wakeUp(){}
+
 /*==============================================================================
  * LOOP()
  *============================================================================*/
@@ -1096,7 +1110,7 @@ void loop()
   byte pin, analogPin;
   int analogData;
   
-  if(!vw_tx_pin) // if vw tx is disabled, send inputs immediately after state change
+  if(!vw_tx_pin || wakeup_pin)
      checkDigitalInputs(false);
   
   if(blinkMillis && (currentMillis >= blinkMillis + BLINK_INTERVAL))
@@ -1108,7 +1122,11 @@ void loop()
   if(!vw_rx_pin && !serial_enabled)
   {
     vw_wait_tx();
+    if(wakeup_pin)
+        attachInterrupt(0, wakeUp, CHANGE);
     LowPower.powerDown(sleep_mode, ADC_OFF, BOD_OFF);
+    if(wakeup_pin)
+        detachInterrupt(0);
     currentMillis += sleep_time;
   }
   else
