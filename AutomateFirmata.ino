@@ -96,7 +96,7 @@ static const int BROADCAST_RECIPIENT = 0xFF;
 static const uint8_t HEADER_LENGTH = 4;
 
 // Incoming sysexs (0x00-0x0F are user defined according to FirmataConstants.h, let's use those)
-static const byte SYSEX_VIRTUALWIRE_MESSAGE = 0x00; // incoming and outgoing
+static const byte SYSEX_VIRTUALWIRE_MESSAGE = 0x00; // This is used both incoming and outgoing
 static const byte SYSEX_KEEP_ALIVE = 0x01;
 static const byte SYSEX_SETUP_VIRTUALWIRE = 0x02;
 
@@ -120,7 +120,7 @@ static const int EEPROM_SAMPLING_INTERVAL = 6; // 2 bytes
 static const int EEPROM_ANALOG_INPUTS_TO_REPORT = 8; // 2 byte
 static const int EEPROM_DIGITAL_INPUTS_TO_REPORT = 10; // size required: TOTAL_PORTS x 1 byte
 static const int EEPROM_PORT_CONFIG_INPUTS = 30; // size required: TOTAL_PORTS x 1 byte
-static const int EEPROM_PIN_MODES = 81; // TOTAL_PINS x 2 bytes
+static const int EEPROM_PIN_MODES = 81; // TOTAL_PINS x 1 byte
 
 #ifdef FIRMATA_SERIAL_FEATURE
 SerialFirmata serialFeature;
@@ -481,7 +481,7 @@ void setPinModeCallback(byte pin, int mode)
       Firmata.sendString("Unknown pin mode");
       return;
   }
-  EEPROM.put(EEPROM_PIN_MODES + 2*pin, mode);
+  EEPROM.update(EEPROM_PIN_MODES + pin, mode);
 }
 
 void configureVirtualWire()
@@ -911,8 +911,6 @@ void setSleepMode()
 void systemResetCallbackFunc(bool init_phase)
 {
   isResetting = true;
-  // initialize a defalt state
-  // TODO: option to load config from EEPROM instead of default
 
 #ifdef FIRMATA_SERIAL_FEATURE
   serialFeature.reset();
@@ -948,17 +946,6 @@ void systemResetCallbackFunc(bool init_phase)
       }
     }
 
-    /* send digital inputs to set the initial state on the host computer,
-     * since once in the loop(), this firmware will only send on change */
-    /*
-    TODO: this can never execute, since no pins default to digital input
-          but it will be needed when/if we support EEPROM stored config
-    for (byte i=0; i < TOTAL_PORTS; i++) {
-      outputPort(i, readPort(i, portConfigInputs[i]), true);
-    }
-    */
-
-    // by default, do not report any analog inputs
     analogInputsToReport = 0;
     
     EEPROM.put(EEPROM_ANALOG_INPUTS_TO_REPORT, (int)0);
@@ -1055,14 +1042,8 @@ void readEepromConfig()
   vw_ptt_pin = EEPROM.read(EEPROM_VIRTUALWIRE_PTT_PIN);
   virtualwire_speed = EEPROM.read(EEPROM_VIRTUALWIRE_SPEED);
   for(int i=0; i<TOTAL_PINS; i++)
-  {
     if(IS_PIN_DIGITAL(i) || IS_PIN_ANALOG(i))
-    {
-      int mode;
-      EEPROM.get(EEPROM_PIN_MODES + 2*i, mode);
-      setPinModeCallback(i, mode);
-    }
-  }
+      setPinModeCallback(i, EEPROM.read(EEPROM_PIN_MODES + i));
   
   for(int port=0; port<TOTAL_PORTS; port++)
   {
