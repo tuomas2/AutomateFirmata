@@ -1111,7 +1111,7 @@ void loop()
     blinkMillis = 0;
   }
 
-  if(!vwRxPin && !serialEnabled)
+  if(vwTxPin && !vwRxPin && !serialEnabled)
   {
     vw_wait_tx();
     if(wakeUpPin)
@@ -1135,7 +1135,7 @@ void loop()
   }
   // TODO - ensure that Stream buffer doesn't go over 60 bytes
 
-  if(serialEnabled && currentMillis - lastSerialMillis > SERIAL_SHUTDOWN_TIME)
+  if(vwTxPin && serialEnabled && currentMillis - lastSerialMillis > SERIAL_SHUTDOWN_TIME)
     serialEnabled = false;
 
   if (currentMillis - previousMillis >= samplingInterval) {
