@@ -9,6 +9,7 @@ Interesting features on top of StandardFirmata:
    Configurable wakeup pin.
  - Simple configuration via SysEx message 
    (which `Automate <https://github.com/tuomas2/automate>`_ implements).
+ - Character LCD support (via SysEx messages)
 
 Please also note:
  - Servo support removed (conflicts with VirtualWire due to use of Timer1).
