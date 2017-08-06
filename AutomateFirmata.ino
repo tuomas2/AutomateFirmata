@@ -3,6 +3,7 @@
 #include <Wire.h>
 #include <LowPower.h>
 #include <VirtualWire.h>
+#include <LiquidCrystal_I2C.h>
 
 /*
 
@@ -78,6 +79,12 @@ extern "C"
 
 char tmpbuf[128];
 
+LiquidCrystal_I2C *lcd = NULL;
+
+byte lcdPort = 0x27;
+byte lcdColumns = 16;
+byte lcdRows = 2;
+
 uint8_t homeId = 0x01; // Set this different to your neighbors 
 uint8_t deviceId = 0x01; // Set this individual within your home
 
@@ -99,6 +106,12 @@ static const uint8_t HEADER_LENGTH = 4;
 static const byte SYSEX_VIRTUALWIRE_MESSAGE = 0x00; // This is used both incoming and outgoing
 static const byte SYSEX_KEEP_ALIVE = 0x01;
 static const byte SYSEX_SETUP_VIRTUALWIRE = 0x02;
+static const byte SYSEX_SETUP_LCD = 0x03;
+static const byte SYSEX_LCD_COMMAND = 0x04;
+
+// LCD command bytes
+static const byte LCD_SET_BACKLIGHT = 0x01;
+static const byte LCD_PRINT = 0x02;
 
 // Virtualwire command bytes
 static const byte VIRTUALWIRE_SET_PIN_MODE = 0x01;
@@ -119,9 +132,13 @@ static const int EEPROM_VIRTUALWIRE_SPEED = 5;
 static const int EEPROM_WAKEUP_PIN = 6;
 static const int EEPROM_SAMPLING_INTERVAL = 7; // 2 bytes 
 static const int EEPROM_ANALOG_INPUTS_TO_REPORT = 9; // 2 byte
-static const int EEPROM_DIGITAL_INPUTS_TO_REPORT = 11; // size required: TOTAL_PORTS x 1 byte
-static const int EEPROM_PORT_CONFIG_INPUTS = 30; // size required: TOTAL_PORTS x 1 byte
-static const int EEPROM_PIN_MODES = 81; // TOTAL_PINS x 1 byte
+static const int EEPROM_LCD_PORT = 11;
+static const int EEPROM_LCD_COLUMNS = 12;
+static const int EEPROM_LCD_ROWS = 13;
+
+static const int EEPROM_DIGITAL_INPUTS_TO_REPORT = 30; // size required: TOTAL_PORTS x 1 byte
+static const int EEPROM_PORT_CONFIG_INPUTS = 60; // size required: TOTAL_PORTS x 1 byte
+static const int EEPROM_PIN_MODES = 80; // TOTAL_PINS x 1 byte
 
 #ifdef FIRMATA_SERIAL_FEATURE
 SerialFirmata serialFeature;
@@ -485,6 +502,20 @@ void setPinModeCallback(byte pin, int mode)
   EEPROM.update(EEPROM_PIN_MODES + pin, mode);
 }
 
+void configureLcd()
+{
+  if(lcd)
+  {
+    delete lcd;
+    lcd = NULL;
+  } 
+  if(lcdPort)
+  {
+    lcd = new LiquidCrystal_I2C(lcdPort, lcdRows, lcdColumns);
+    lcd->begin();
+  }
+}
+
 void configureVirtualWire()
 {
 
@@ -636,8 +667,35 @@ void sysexCallback(byte command, byte argc, byte *argv)
   byte data;
   int slaveRegister;
   unsigned int delayTime;
+  byte lcdCommand;
 
   switch (command) {
+    case SYSEX_SETUP_LCD:
+      lcdPort = argv[0];
+      lcdColumns = argv[1];
+      lcdRows = argv[2];
+      EEPROM.update(EEPROM_LCD_PORT, lcdPort);
+      EEPROM.update(EEPROM_LCD_COLUMNS, lcdColumns);
+      EEPROM.update(EEPROM_LCD_ROWS, lcdRows);
+      configureLcd();
+      break;
+    case SYSEX_LCD_COMMAND:
+      if(!lcd)
+        return;
+      
+      lcdCommand = argv[0];
+      switch (lcdCommand) {
+        case LCD_SET_BACKLIGHT:
+          if(argv[1])
+            lcd->backlight();
+          else
+            lcd->noBacklight();
+        break;
+        case LCD_PRINT:
+          lcd->clear();
+          lcd->print((char*)&argv[1]);
+        break;
+      }
     case SYSEX_KEEP_ALIVE:
       break;
     case SYSEX_SETUP_VIRTUALWIRE:
@@ -1049,6 +1107,7 @@ void readEepromConfig()
   vwPttPin = EEPROM.read(EEPROM_VIRTUALWIRE_PTT_PIN);
   wakeUpPin = EEPROM.read(EEPROM_WAKEUP_PIN);
   virtualWireSpeed = EEPROM.read(EEPROM_VIRTUALWIRE_SPEED);
+
   for(int i=0; i<TOTAL_PINS; i++)
     if(IS_PIN_DIGITAL(i) || IS_PIN_ANALOG(i))
       setPinModeCallback(i, EEPROM.read(EEPROM_PIN_MODES + i));
@@ -1061,6 +1120,11 @@ void readEepromConfig()
 
   EEPROM.get(EEPROM_ANALOG_INPUTS_TO_REPORT, analogInputsToReport);
   configureVirtualWire();
+  
+  lcdPort = EEPROM.read(EEPROM_LCD_PORT);
+  lcdColumns = EEPROM.read(EEPROM_LCD_COLUMNS);
+  lcdRows = EEPROM.read(EEPROM_LCD_ROWS);
+  configureLcd();
 }
 
 void setup()
