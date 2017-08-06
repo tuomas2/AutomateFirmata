@@ -511,7 +511,7 @@ void configureLcd()
   } 
   if(lcdPort)
   {
-    lcd = new LiquidCrystal_I2C(lcdPort, lcdRows, lcdColumns);
+    lcd = new LiquidCrystal_I2C(lcdPort, lcdColumns, lcdRows);
     lcd->begin();
   }
 }
