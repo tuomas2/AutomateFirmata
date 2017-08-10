@@ -135,6 +135,11 @@ static const int EEPROM_ANALOG_INPUTS_TO_REPORT = 9; // 2 byte
 static const int EEPROM_LCD_PORT = 11;
 static const int EEPROM_LCD_COLUMNS = 12;
 static const int EEPROM_LCD_ROWS = 13;
+static const int EEPROM_CONFIGURED = 14;
+static const int EEPROM_CONFIG_VERSION = 15;
+
+static const byte IS_CONFIGURED = 0b10101010;
+static const byte CONFIG_VERSION = 1;
 
 static const int EEPROM_DIGITAL_INPUTS_TO_REPORT = 30; // size required: TOTAL_PORTS x 1 byte
 static const int EEPROM_PORT_CONFIG_INPUTS = 60; // size required: TOTAL_PORTS x 1 byte
@@ -1028,6 +1033,8 @@ void systemResetCallbackFunc(bool init_phase)
     EEPROM.update(EEPROM_WAKEUP_PIN, wakeUpPin);
     EEPROM.update(EEPROM_VIRTUALWIRE_SPEED, virtualWireSpeed);
     EEPROM.put(EEPROM_SAMPLING_INTERVAL, samplingInterval);
+    EEPROM.update(EEPROM_CONFIGURED, IS_CONFIGURED);
+    EEPROM.update(EEPROM_CONFIG_VERSION, CONFIG_VERSION);
   }
 
   setSleepMode();
@@ -1099,6 +1106,12 @@ inline void readVirtualWire()
 
 void readEepromConfig()
 {
+  uint8_t configured = EEPROM.read(EEPROM_CONFIGURED);
+  uint8_t config_version = EEPROM.read(EEPROM_CONFIG_VERSION);
+
+  if(configured != IS_CONFIGURED || config_version != CONFIG_VERSION)
+    return;
+
   homeId = EEPROM.read(EEPROM_HOME_ID);
   deviceId = EEPROM.read(EEPROM_DEVICE_ID);
   EEPROM.get(EEPROM_SAMPLING_INTERVAL, samplingInterval);
