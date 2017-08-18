@@ -137,9 +137,10 @@ static const int EEPROM_LCD_COLUMNS = 12;
 static const int EEPROM_LCD_ROWS = 13;
 static const int EEPROM_CONFIGURED = 14;
 static const int EEPROM_CONFIG_VERSION = 15;
+static const int EEPROM_IS_I2C_ENABLED = 16;
 
 static const byte IS_CONFIGURED = 0b10101010;
-static const byte CONFIG_VERSION = 1;
+static const byte CONFIG_VERSION = 2;
 
 static const int EEPROM_DIGITAL_INPUTS_TO_REPORT = 30; // size required: TOTAL_PORTS x 1 byte
 static const int EEPROM_PORT_CONFIG_INPUTS = 60; // size required: TOTAL_PORTS x 1 byte
@@ -292,6 +293,7 @@ void enableI2CPins()
   }
 
   isI2CEnabled = true;
+  EEPROM.update(EEPROM_IS_I2C_ENABLED, isI2CEnabled);
 
   Wire.begin();
 }
@@ -299,6 +301,7 @@ void enableI2CPins()
 /* disable the i2c pins so they can be used for other functions */
 void disableI2CPins() {
   isI2CEnabled = false;
+  EEPROM.update(EEPROM_IS_I2C_ENABLED, isI2CEnabled);
   // disable read continuous mode for all devices
   queryIndex = -1;
 }
@@ -984,14 +987,16 @@ void systemResetCallbackFunc(bool init_phase)
   serialFeature.reset();
 #endif
 
-  if (isI2CEnabled) {
-    disableI2CPins();
-  }
-
   if(init_phase)
     readEepromConfig();
   else
   { 
+
+    if (isI2CEnabled) {
+        disableI2CPins();
+    }
+    EEPROM.update(EEPROM_IS_I2C_ENABLED, isI2CEnabled);
+
     for (byte i = 0; i < TOTAL_PORTS; i++) {
       reportPINs[i] = false;    // by default, reporting off
       portConfigInputs[i] = 0;  // until activated
@@ -1120,6 +1125,7 @@ void readEepromConfig()
   vwPttPin = EEPROM.read(EEPROM_VIRTUALWIRE_PTT_PIN);
   wakeUpPin = EEPROM.read(EEPROM_WAKEUP_PIN);
   virtualWireSpeed = EEPROM.read(EEPROM_VIRTUALWIRE_SPEED);
+  isI2CEnabled = EEPROM.read(EEPROM_IS_I2C_ENABLED);  
 
   for(int i=0; i<TOTAL_PINS; i++)
     if(IS_PIN_DIGITAL(i) || IS_PIN_ANALOG(i))
@@ -1130,6 +1136,9 @@ void readEepromConfig()
     reportPINs[port] = EEPROM.read(EEPROM_DIGITAL_INPUTS_TO_REPORT + port);
     portConfigInputs[port] = EEPROM.read(EEPROM_PORT_CONFIG_INPUTS + port); 
   }
+
+  if(isI2CEnabled)
+    enableI2CPins();
 
   EEPROM.get(EEPROM_ANALOG_INPUTS_TO_REPORT, analogInputsToReport);
   configureVirtualWire();
