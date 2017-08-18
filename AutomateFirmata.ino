@@ -137,7 +137,6 @@ static const int EEPROM_LCD_COLUMNS = 12;
 static const int EEPROM_LCD_ROWS = 13;
 static const int EEPROM_CONFIGURED = 14;
 static const int EEPROM_CONFIG_VERSION = 15;
-static const int EEPROM_IS_I2C_ENABLED = 16;
 
 static const byte IS_CONFIGURED = 0b10101010;
 static const byte CONFIG_VERSION = 2;
@@ -145,6 +144,13 @@ static const byte CONFIG_VERSION = 2;
 static const int EEPROM_DIGITAL_INPUTS_TO_REPORT = 30; // size required: TOTAL_PORTS x 1 byte
 static const int EEPROM_PORT_CONFIG_INPUTS = 60; // size required: TOTAL_PORTS x 1 byte
 static const int EEPROM_PIN_MODES = 80; // TOTAL_PINS x 1 byte
+
+static const int EEPROM_IS_I2C_ENABLED = 150;
+static const int EEPROM_I2C_QUERY_INDEX = 151;
+static const int EEPROM_I2C_QUERY = 152; // sizeof(i2c_device_info)*queryIndex
+
+
+
 
 #ifdef FIRMATA_SERIAL_FEATURE
 SerialFirmata serialFeature;
@@ -301,9 +307,10 @@ void enableI2CPins()
 /* disable the i2c pins so they can be used for other functions */
 void disableI2CPins() {
   isI2CEnabled = false;
-  EEPROM.update(EEPROM_IS_I2C_ENABLED, isI2CEnabled);
   // disable read continuous mode for all devices
   queryIndex = -1;
+  EEPROM.update(EEPROM_IS_I2C_ENABLED, isI2CEnabled);
+  EEPROM.update(EEPROM_I2C_QUERY_INDEX, queryIndex);
 }
 
 void readAndReportData(byte address, int theRegister, byte numBytes, byte stopTX) {
@@ -791,6 +798,8 @@ void sysexCallback(byte command, byte argc, byte *argv)
           query[queryIndex].reg = slaveRegister;
           query[queryIndex].bytes = data;
           query[queryIndex].stopTX = stopTX;
+          EEPROM.update(EEPROM_I2C_QUERY_INDEX, queryIndex);
+          EEPROM.put(EEPROM_I2C_QUERY + queryIndex*sizeof(i2c_device_info), query[queryIndex]);
           break;
         case I2C_STOP_READING:
           byte queryIndexToSkip;
@@ -816,10 +825,13 @@ void sysexCallback(byte command, byte argc, byte *argv)
                 query[i].reg = query[i + 1].reg;
                 query[i].bytes = query[i + 1].bytes;
                 query[i].stopTX = query[i + 1].stopTX;
+                EEPROM.put(EEPROM_I2C_QUERY + i*sizeof(i2c_device_info), query[i]);
               }
             }
             queryIndex--;
           }
+          EEPROM.update(EEPROM_I2C_QUERY_INDEX, queryIndex);
+
           break;
         default:
           break;
@@ -995,7 +1007,6 @@ void systemResetCallbackFunc(bool init_phase)
     if (isI2CEnabled) {
         disableI2CPins();
     }
-    EEPROM.update(EEPROM_IS_I2C_ENABLED, isI2CEnabled);
 
     for (byte i = 0; i < TOTAL_PORTS; i++) {
       reportPINs[i] = false;    // by default, reporting off
@@ -1126,7 +1137,8 @@ void readEepromConfig()
   wakeUpPin = EEPROM.read(EEPROM_WAKEUP_PIN);
   virtualWireSpeed = EEPROM.read(EEPROM_VIRTUALWIRE_SPEED);
   isI2CEnabled = EEPROM.read(EEPROM_IS_I2C_ENABLED);  
-
+  queryIndex = (signed char)EEPROM.read(EEPROM_I2C_QUERY_INDEX);  
+  
   for(int i=0; i<TOTAL_PINS; i++)
     if(IS_PIN_DIGITAL(i) || IS_PIN_ANALOG(i))
       setPinModeCallback(i, EEPROM.read(EEPROM_PIN_MODES + i));
@@ -1137,6 +1149,9 @@ void readEepromConfig()
     portConfigInputs[port] = EEPROM.read(EEPROM_PORT_CONFIG_INPUTS + port); 
   }
 
+  for(int q=0; q<queryIndex; q++)
+    EEPROM.get(EEPROM_I2C_QUERY + q*sizeof(i2c_device_info), query[q]);
+  
   if(isI2CEnabled)
     enableI2CPins();
 
