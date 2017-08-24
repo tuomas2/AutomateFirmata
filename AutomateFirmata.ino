@@ -112,6 +112,8 @@ static const byte SYSEX_LCD_COMMAND = 0x04;
 // LCD command bytes
 static const byte LCD_SET_BACKLIGHT = 0x01;
 static const byte LCD_PRINT = 0x02;
+static const byte LCD_CLEAR = 0x03;
+static const byte LCD_SET_CURSOR = 0x04;
 
 // Virtualwire command bytes
 static const byte VIRTUALWIRE_SET_PIN_MODE = 0x01;
@@ -705,11 +707,16 @@ void sysexCallback(byte command, byte argc, byte *argv)
             lcd->backlight();
           else
             lcd->noBacklight();
-        break;
-        case LCD_PRINT:
+          break;
+        case LCD_SET_CURSOR:
+          lcd->setCursor(argv[1], argv[2]);
+          break;
+        case LCD_CLEAR:
           lcd->clear();
+          break;
+        case LCD_PRINT:
           lcd->print((char*)&argv[1]);
-        break;
+          break;
       }
     case SYSEX_KEEP_ALIVE:
       break;
