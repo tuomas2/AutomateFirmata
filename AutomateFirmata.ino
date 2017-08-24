@@ -530,6 +530,10 @@ void configureLcd()
   {
     lcd = new LiquidCrystal_I2C(lcdPort, lcdColumns, lcdRows);
     lcd->begin();
+    lcd->print("AutomateFirmata");
+    lcd->setCursor(0,1);
+    lcd->print("     ready!");
+    lcd->setCursor(0,0);
   }
 }
 
