@@ -46,6 +46,18 @@
  */
 
 
+
+#define DEBUG 0
+
+#if DEBUG
+  char tmpBuf[64];
+  #define dbgf(f_, ...) snprintf_P(tmpBuf, sizeof(tmpBuf), PSTR(f_), __VA_ARGS__); Firmata.sendString(tmpBuf);
+  #define dbg(f_) snprintf_P(tmpBuf, sizeof(tmpBuf), PSTR(f_)); Firmata.sendString(tmpBuf);
+#else
+  #define dbgf(...);
+  #define dbg(f_);
+#endif
+
 #define I2C_WRITE                   B00000000
 #define I2C_READ                    B00001000
 #define I2C_READ_CONTINUOUSLY       B00010000
@@ -77,13 +89,19 @@ extern "C"
  *============================================================================*/
 
 
-char tmpbuf[128];
 
 LiquidCrystal_I2C *lcd = NULL;
+LiquidCrystal_I2C lcd0(0x27, 16, 2);
+
+char lcdBuf[20];  
 
 byte lcdPort = 0x27;
 byte lcdColumns = 16;
 byte lcdRows = 2;
+
+bool lcdReporting = true;
+unsigned short int reportPin = 0; // currently being reported
+unsigned long previousLCDMillis = 0;
 
 uint8_t homeId = 0x01; // Set this different to your neighbors 
 uint8_t deviceId = 0x01; // Set this individual within your home
@@ -114,6 +132,7 @@ static const byte LCD_SET_BACKLIGHT = 0x01;
 static const byte LCD_PRINT = 0x02;
 static const byte LCD_CLEAR = 0x03;
 static const byte LCD_SET_CURSOR = 0x04;
+static const byte LCD_SET_REPORTING = 0x05;
 
 // Virtualwire command bytes
 static const byte VIRTUALWIRE_SET_PIN_MODE = 0x01;
@@ -140,17 +159,16 @@ static const int EEPROM_LCD_ROWS = 13;
 static const int EEPROM_CONFIGURED = 14;
 static const int EEPROM_CONFIG_VERSION = 15;
 
+static const int EEPROM_DIGITAL_INPUTS_TO_REPORT = 50; // size required: TOTAL_PORTS x 1 byte
+static const int EEPROM_PORT_CONFIG_INPUTS = 100; // size required: TOTAL_PORTS x 1 byte
+static const int EEPROM_PIN_MODES = 150; // TOTAL_PINS x 1 byte
+
+static const int EEPROM_IS_I2C_ENABLED = 200;
+static const int EEPROM_I2C_QUERY_INDEX = 201;
+static const int EEPROM_I2C_QUERY = 202; // sizeof(i2c_device_info)*queryIndex
+
 static const byte IS_CONFIGURED = 0b10101010;
-static const byte CONFIG_VERSION = 2;
-
-static const int EEPROM_DIGITAL_INPUTS_TO_REPORT = 30; // size required: TOTAL_PORTS x 1 byte
-static const int EEPROM_PORT_CONFIG_INPUTS = 60; // size required: TOTAL_PORTS x 1 byte
-static const int EEPROM_PIN_MODES = 80; // TOTAL_PINS x 1 byte
-
-static const int EEPROM_IS_I2C_ENABLED = 150;
-static const int EEPROM_I2C_QUERY_INDEX = 151;
-static const int EEPROM_I2C_QUERY = 152; // sizeof(i2c_device_info)*queryIndex
-
+static const byte CONFIG_VERSION = 3;
 
 
 
@@ -162,7 +180,7 @@ SerialFirmata serialFeature;
 int analogInputsToReport = 0; // bitwise array to store pin reporting
 
 /* digital input ports */
-boolean reportPINs[TOTAL_PORTS];       // 1 = report this port, 0 = silence. 1 port == 8 pins.
+byte reportPINs[TOTAL_PORTS];       // 1 = report this port, 0 = silence. 1 port == 8 pins.
 byte previousPINs[TOTAL_PORTS];     // previous 8 bits sent
 
 /* pins configuration */
@@ -172,6 +190,8 @@ byte portConfigInputs[TOTAL_PORTS];  // each bit: 1 = pin in (any) INPUT, 0 = an
 unsigned long currentMillis;        // store the current value from millis()
 unsigned long previousMillis;       // for comparison with currentMillis
 unsigned long lastSerialMillis = 0;       // for comparison with currentMillis
+int lcdInterval = 4000;
+
 
 unsigned int samplingInterval = DEFAULT_SAMPLING_INTERVAL; // how often to run the main loop (in ms)
 
@@ -336,9 +356,9 @@ void readAndReportData(byte address, int theRegister, byte numBytes, byte stopTX
 
   // check to be sure correct number of bytes were returned by slave
   if (numBytes < Wire.available()) {
-    Firmata.sendString("I2C: Too many bytes received");
+    dbg("I2C: Too many bytes received");
   } else if (numBytes > Wire.available()) {
-    Firmata.sendString("I2C: Too few bytes received");
+    dbg("I2C: Too few bytes received");
   }
 
   i2cRxData[0] = address;
@@ -513,38 +533,38 @@ void setPinModeCallback(byte pin, int mode)
 #endif
       break;
     default:
-      Firmata.sendString("Unknown pin mode");
+      dbg("Unknown pin mode");
       return;
   }
+  dbgf("Before update pin %d:%d", pin, EEPROM.read(EEPROM_PIN_MODES+pin));
   EEPROM.update(EEPROM_PIN_MODES + pin, mode);
+  dbgf("After update pin %d:%d", pin, EEPROM.read(EEPROM_PIN_MODES+pin));
 }
 
 void configureLcd()
 {
   if(lcd)
   {
-    delete lcd;
+    //delete lcd;
     lcd = NULL;
   } 
   if(lcdPort)
   {
-    lcd = new LiquidCrystal_I2C(lcdPort, lcdColumns, lcdRows);
+    lcd0 = LiquidCrystal_I2C(lcdPort, lcdColumns, lcdRows);
+    lcd = &lcd0;
     lcd->begin();
     lcd->print("AutomateFirmata");
     lcd->setCursor(0,1);
     lcd->print("     ready!");
     lcd->setCursor(0,0);
+    lcd->setBacklight(false);
   }
 }
 
 void configureVirtualWire()
 {
-
   if(virtualWireSpeed < 1 || virtualWireSpeed > 9)
-  {
-    Firmata.sendString("Invalid virtualWireSpeed, resetting to default");
     virtualWireSpeed = DEFAULT_VIRTUALWIRE_SPEED;
-  }
   vw_rx_stop();
   vw_tx_stop();
   if(vwRxPin)
@@ -635,6 +655,7 @@ void digitalWriteCallback(byte port, int value)
 void reportAnalogCallback(byte analogPin, int value)
 {
   int analogData;
+  dbgf("Report analog pin %d: %d", analogPin, value);
   if (analogPin < TOTAL_ANALOG_PINS) {
     if (value == 0) {
       analogInputsToReport = analogInputsToReport & ~ (1 << analogPin);
@@ -659,7 +680,9 @@ void reportAnalogCallback(byte analogPin, int value)
 
 void reportDigitalCallback(byte port, int value)
 {
+  dbgf("reportDigitalCallback %d %d", port, value)
   if (port < TOTAL_PORTS) {
+    dbgf("set reportPINs[%d]:%d", port, value)
     reportPINs[port] = value;
     if(!isResetting)
       EEPROM.update(EEPROM_DIGITAL_INPUTS_TO_REPORT + port, value);
@@ -721,8 +744,12 @@ void sysexCallback(byte command, byte argc, byte *argv)
         case LCD_PRINT:
           lcd->print((char*)&argv[1]);
           break;
+        case LCD_SET_REPORTING:
+          lcdReporting = argv[1];
+          break;
       }
     case SYSEX_KEEP_ALIVE:
+      dbg("I'm alive!");
       break;
     case SYSEX_SETUP_VIRTUALWIRE:
       vwRxPin = argv[0];
@@ -743,13 +770,15 @@ void sysexCallback(byte command, byte argc, byte *argv)
       configureVirtualWire();
       break;
     case SYSEX_VIRTUALWIRE_MESSAGE:
+      dbg("SysEx VW");
       blink();
-      vw_send(argv, argc);
+      if(vwTxPin)
+        vw_send(argv, argc);
       break;
     case I2C_REQUEST:
       mode = argv[1] & I2C_READ_WRITE_MODE_MASK;
       if (argv[1] & I2C_10BIT_ADDRESS_MODE_MASK) {
-        Firmata.sendString("10-bit addressing not supported");
+        dbg("10-bit addressing not supported");
         return;
       }
       else {
@@ -791,7 +820,7 @@ void sysexCallback(byte command, byte argc, byte *argv)
         case I2C_READ_CONTINUOUSLY:
           if ((queryIndex + 1) >= I2C_MAX_QUERIES) {
             // too many queries, just ignore
-            Firmata.sendString("too many queries");
+            dbg("too many queries");
             break;
           }
           if (argc == 6) {
@@ -1001,71 +1030,80 @@ void setSleepMode()
   }
 }
 
+void hardReset()
+{
+  if (isI2CEnabled) {
+      disableI2CPins();
+  }
+
+  for (byte i = 0; i < TOTAL_PORTS; i++) {
+    dbgf("reset reportPINS[%d]: %d", i, false);
+    reportPINs[i] = false;    // by default, reporting off
+    portConfigInputs[i] = 0;  // until activated
+    previousPINs[i] = 0;
+
+    EEPROM.update(EEPROM_DIGITAL_INPUTS_TO_REPORT + i, (byte)0);
+    EEPROM.update(EEPROM_PORT_CONFIG_INPUTS + i, (byte)0);
+  }
+
+  for (byte i = 0; i < TOTAL_PINS; i++) {
+    // pins with analog capability default to analog input
+    // otherwise, pins default to digital output
+
+    if (IS_PIN_ANALOG(i)) {
+      // turns off pullup, configures everything
+      setPinModeCallback(i, PIN_MODE_ANALOG);
+    } else if (IS_PIN_DIGITAL(i)) {
+      // sets the output to 0, configures portConfigInputs
+      setPinModeCallback(i, OUTPUT); 
+    }
+  }
+
+  analogInputsToReport = 0;
+
+  EEPROM.put(EEPROM_ANALOG_INPUTS_TO_REPORT, (int)0);
+
+  vw_rx_stop();
+  vw_tx_stop();
+  vwRxPin = 0;
+  vwTxPin = 0;
+  vwPttPin = 0;
+  wakeUpPin = 0;
+  virtualWireSpeed = DEFAULT_VIRTUALWIRE_SPEED;
+  samplingInterval = DEFAULT_SAMPLING_INTERVAL;
+
+  EEPROM.update(EEPROM_VIRTUALWIRE_TX_PIN, vwTxPin);
+  EEPROM.update(EEPROM_VIRTUALWIRE_RX_PIN, vwRxPin);
+  EEPROM.update(EEPROM_VIRTUALWIRE_PTT_PIN, vwPttPin);
+  EEPROM.update(EEPROM_WAKEUP_PIN, wakeUpPin);
+  EEPROM.update(EEPROM_VIRTUALWIRE_SPEED, virtualWireSpeed);
+  EEPROM.put(EEPROM_SAMPLING_INTERVAL, samplingInterval);
+  EEPROM.update(EEPROM_CONFIGURED, IS_CONFIGURED);
+  EEPROM.update(EEPROM_CONFIG_VERSION, CONFIG_VERSION);
+}
 
 void systemResetCallbackFunc(bool init_phase)
 {
   isResetting = true;
+  bool configRead = false;
 
 #ifdef FIRMATA_SERIAL_FEATURE
   serialFeature.reset();
 #endif
 
   if(init_phase)
-    readEepromConfig();
-  else
-  { 
+  {
+    configRead = readEepromConfig();
+  }
 
-    if (isI2CEnabled) {
-        disableI2CPins();
-    }
-
-    for (byte i = 0; i < TOTAL_PORTS; i++) {
-      reportPINs[i] = false;    // by default, reporting off
-      portConfigInputs[i] = 0;  // until activated
-      previousPINs[i] = 0;
-
-      EEPROM.update(EEPROM_DIGITAL_INPUTS_TO_REPORT + i, (byte)0);
-      EEPROM.update(EEPROM_PORT_CONFIG_INPUTS + i, (byte)0);
-    }
-
-    for (byte i = 0; i < TOTAL_PINS; i++) {
-      // pins with analog capability default to analog input
-      // otherwise, pins default to digital output
-
-      if (IS_PIN_ANALOG(i)) {
-        // turns off pullup, configures everything
-        setPinModeCallback(i, PIN_MODE_ANALOG);
-      } else if (IS_PIN_DIGITAL(i)) {
-        // sets the output to 0, configures portConfigInputs
-        setPinModeCallback(i, OUTPUT); 
-      }
-    }
-
-    analogInputsToReport = 0;
-
-    EEPROM.put(EEPROM_ANALOG_INPUTS_TO_REPORT, (int)0);
-
-    vw_rx_stop();
-    vw_tx_stop();
-    vwRxPin = 0;
-    vwTxPin = 0;
-    vwPttPin = 0;
-    wakeUpPin = 0;
-    virtualWireSpeed = DEFAULT_VIRTUALWIRE_SPEED;
-    samplingInterval = DEFAULT_SAMPLING_INTERVAL;
-
-    EEPROM.update(EEPROM_VIRTUALWIRE_TX_PIN, vwTxPin);
-    EEPROM.update(EEPROM_VIRTUALWIRE_RX_PIN, vwRxPin);
-    EEPROM.update(EEPROM_VIRTUALWIRE_PTT_PIN, vwPttPin);
-    EEPROM.update(EEPROM_WAKEUP_PIN, wakeUpPin);
-    EEPROM.update(EEPROM_VIRTUALWIRE_SPEED, virtualWireSpeed);
-    EEPROM.put(EEPROM_SAMPLING_INTERVAL, samplingInterval);
-    EEPROM.update(EEPROM_CONFIGURED, IS_CONFIGURED);
-    EEPROM.update(EEPROM_CONFIG_VERSION, CONFIG_VERSION);
+  if(!configRead)
+  {
+    hardReset();
   }
 
   setSleepMode();
   isResetting = false;
+  dbg("System reset ready");
 }
 
 void systemResetCallback()
@@ -1075,6 +1113,7 @@ void systemResetCallback()
 
 void blink()
 {
+  dbg("Blink!");
   digitalWrite(BLINK_PIN, HIGH);
   blinkMillis = millis();
 }
@@ -1131,13 +1170,13 @@ inline void readVirtualWire()
   }
 }
 
-void readEepromConfig()
+bool readEepromConfig()
 {
   uint8_t configured = EEPROM.read(EEPROM_CONFIGURED);
   uint8_t config_version = EEPROM.read(EEPROM_CONFIG_VERSION);
 
   if(configured != IS_CONFIGURED || config_version != CONFIG_VERSION)
-    return;
+    return false;
 
   homeId = EEPROM.read(EEPROM_HOME_ID);
   deviceId = EEPROM.read(EEPROM_DEVICE_ID);
@@ -1152,11 +1191,15 @@ void readEepromConfig()
   
   for(int i=0; i<TOTAL_PINS; i++)
     if(IS_PIN_DIGITAL(i) || IS_PIN_ANALOG(i))
+    { 
+      dbgf("readEepromConfig pin %d:%d", i, EEPROM.read(EEPROM_PIN_MODES + i));
       setPinModeCallback(i, EEPROM.read(EEPROM_PIN_MODES + i));
-
+    }
+  dbg("Reading port config...");
   for(int port=0; port<TOTAL_PORTS; port++)
   {
     reportPINs[port] = EEPROM.read(EEPROM_DIGITAL_INPUTS_TO_REPORT + port);
+    dbgf("reportPINS[%d]: %d", port, reportPINs[port]);
     portConfigInputs[port] = EEPROM.read(EEPROM_PORT_CONFIG_INPUTS + port); 
   }
 
@@ -1173,6 +1216,7 @@ void readEepromConfig()
   lcdColumns = EEPROM.read(EEPROM_LCD_COLUMNS);
   lcdRows = EEPROM.read(EEPROM_LCD_ROWS);
   configureLcd();
+  return true;
 }
 
 void setup()
@@ -1204,6 +1248,7 @@ void setup()
     ; // wait for serial port to connect. Needed for ATmega32u4-based boards and Arduino 101
   }
   systemResetCallbackFunc(true);
+  dbg("Setup ready.");
 }
 
 void wakeUp(){}
@@ -1213,6 +1258,8 @@ void loop()
 
   byte pin, analogPin;
   int analogData;
+  unsigned short int pinIdx = 0;
+  unsigned short int lastPin = 0;
 
   if(!vwTxPin || wakeUpPin)
     checkDigitalInputs(false);
@@ -1249,11 +1296,43 @@ void loop()
 
   if(vwTxPin && serialEnabled && currentMillis - lastSerialMillis > SERIAL_SHUTDOWN_TIME)
     serialEnabled = false;
-
+  
+  pinIdx = 0;
   if (currentMillis - previousMillis >= samplingInterval) {
     previousMillis = currentMillis;
     if(vwTxPin)
       checkDigitalInputs(true);
+    if(reportPINs[0] || reportPINs[1])
+    {
+      for(unsigned short int port=0; port<2; port++)
+      {
+        byte v = previousPINs[port];
+        //dbg("Writing digital to lcd");
+        sprintf(lcdBuf,"D%2d-%2d: %d%d%d%d%d%d%d%d",  port*8, 
+                                                      (port+1)*8-1,
+                                                      bool(v & (1<<0)),
+                                                      bool(v & (1<<1)),
+                                                      bool(v & (1<<2)),
+                                                      bool(v & (1<<3)),
+                                                      bool(v & (1<<4)),
+                                                      bool(v & (1<<5)),
+                                                      bool(v & (1<<6)),
+                                                      bool(v & (1<<7))
+                );
+        if(reportPINs[0] && pinIdx == reportPin)
+        {
+          lcd -> setCursor(0,0);
+          lcd -> print(lcdBuf);
+        }
+        else if(reportPINs[1] && pinIdx == reportPin + 1)
+        {
+          lcd -> setCursor(0,1);
+          lcd -> print(lcdBuf);
+        }
+        pinIdx ++;
+      }
+      pinIdx += 2;
+    }
     for (pin = 0; pin < TOTAL_PINS; pin++) {
       if (IS_PIN_ANALOG(pin) && Firmata.getPinMode(pin) == PIN_MODE_ANALOG) {
         analogPin = PIN_TO_ANALOG(pin);
@@ -1262,6 +1341,33 @@ void loop()
           if(serialEnabled)
             Firmata.sendAnalog(analogPin, analogData);
           sendVirtualWireAnalogOutput(analogPin, analogData);
+          if(lcd && lcdReporting)
+          {
+            float f = 0.999999*float(analogData)/1023.;
+            sprintf(lcdBuf,"A%d:%d.%02d ", analogPin, (int)f, (int)(f*100)%100);
+            if(pinIdx == reportPin)
+            {
+              lcd -> setCursor(0,0);
+              lcd -> print(lcdBuf);
+            }
+            else if(pinIdx == reportPin + 1)
+            {
+              lcd -> setCursor(8,0);
+              lcd -> print(lcdBuf);
+            }
+            else if(pinIdx == reportPin + 2)
+            {
+              lcd -> setCursor(0,1);
+              lcd -> print(lcdBuf);
+            }
+            
+            else if(pinIdx == reportPin + 3)
+            {
+              lcd -> setCursor(8,1);
+              lcd -> print(lcdBuf);
+            }
+          }
+          pinIdx++;
         }
       }
     }
@@ -1271,9 +1377,19 @@ void loop()
         readAndReportData(query[i].addr, query[i].reg, query[i].bytes, query[i].stopTX);
       }
     }
+    lastPin = pinIdx - 1;
+    if(currentMillis > previousLCDMillis + lcdInterval)
+    {
+      previousLCDMillis = currentMillis;
+      reportPin += 4;
+      if(reportPin > lastPin)
+        reportPin = 0;
+    }
   }
+    
   if(vwRxPin)
     readVirtualWire(); 
+  
 
 #ifdef FIRMATA_SERIAL_FEATURE
   serialFeature.update();
