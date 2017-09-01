@@ -47,7 +47,7 @@
 
 
 
-#define DEBUG 0
+#define DEBUG 1
 
 #if DEBUG
   char tmpBuf[64];
@@ -536,9 +536,7 @@ void setPinModeCallback(byte pin, int mode)
       dbg("Unknown pin mode");
       return;
   }
-  dbgf("Before update pin %d:%d", pin, EEPROM.read(EEPROM_PIN_MODES+pin));
   EEPROM.update(EEPROM_PIN_MODES + pin, mode);
-  dbgf("After update pin %d:%d", pin, EEPROM.read(EEPROM_PIN_MODES+pin));
 }
 
 void configureLcd()
@@ -655,7 +653,6 @@ void digitalWriteCallback(byte port, int value)
 void reportAnalogCallback(byte analogPin, int value)
 {
   int analogData;
-  dbgf("Report analog pin %d: %d", analogPin, value);
   if (analogPin < TOTAL_ANALOG_PINS) {
     if (value == 0) {
       analogInputsToReport = analogInputsToReport & ~ (1 << analogPin);
@@ -680,9 +677,7 @@ void reportAnalogCallback(byte analogPin, int value)
 
 void reportDigitalCallback(byte port, int value)
 {
-  dbgf("reportDigitalCallback %d %d", port, value)
   if (port < TOTAL_PORTS) {
-    dbgf("set reportPINs[%d]:%d", port, value)
     reportPINs[port] = value;
     if(!isResetting)
       EEPROM.update(EEPROM_DIGITAL_INPUTS_TO_REPORT + port, value);
@@ -770,7 +765,6 @@ void sysexCallback(byte command, byte argc, byte *argv)
       configureVirtualWire();
       break;
     case SYSEX_VIRTUALWIRE_MESSAGE:
-      dbg("SysEx VW");
       blink();
       if(vwTxPin)
         vw_send(argv, argc);
@@ -1113,7 +1107,6 @@ void systemResetCallback()
 
 void blink()
 {
-  dbg("Blink!");
   digitalWrite(BLINK_PIN, HIGH);
   blinkMillis = millis();
 }
@@ -1192,14 +1185,12 @@ bool readEepromConfig()
   for(int i=0; i<TOTAL_PINS; i++)
     if(IS_PIN_DIGITAL(i) || IS_PIN_ANALOG(i))
     { 
-      dbgf("readEepromConfig pin %d:%d", i, EEPROM.read(EEPROM_PIN_MODES + i));
       setPinModeCallback(i, EEPROM.read(EEPROM_PIN_MODES + i));
     }
   dbg("Reading port config...");
   for(int port=0; port<TOTAL_PORTS; port++)
   {
     reportPINs[port] = EEPROM.read(EEPROM_DIGITAL_INPUTS_TO_REPORT + port);
-    dbgf("reportPINS[%d]: %d", port, reportPINs[port]);
     portConfigInputs[port] = EEPROM.read(EEPROM_PORT_CONFIG_INPUTS + port); 
   }
 
@@ -1308,16 +1299,17 @@ void loop()
       {
         byte v = previousPINs[port];
         //dbg("Writing digital to lcd");
-        sprintf(lcdBuf,"D%2d-%2d: %d%d%d%d%d%d%d%d",  port*8, 
-                                                      (port+1)*8-1,
-                                                      bool(v & (1<<0)),
-                                                      bool(v & (1<<1)),
-                                                      bool(v & (1<<2)),
-                                                      bool(v & (1<<3)),
-                                                      bool(v & (1<<4)),
-                                                      bool(v & (1<<5)),
-                                                      bool(v & (1<<6)),
-                                                      bool(v & (1<<7))
+        snprintf_P(lcdBuf, sizeof(lcdBuf), PSTR("D%2d-%2d: %d%d%d%d%d%d%d%d"),  
+                   port*8, 
+                   (port+1)*8-1,
+                   bool(v & (1<<0)),
+                   bool(v & (1<<1)),
+                   bool(v & (1<<2)),
+                   bool(v & (1<<3)),
+                   bool(v & (1<<4)),
+                   bool(v & (1<<5)),
+                   bool(v & (1<<6)),
+                   bool(v & (1<<7))
                 );
         if(reportPINs[0] && pinIdx == reportPin)
         {
@@ -1344,7 +1336,7 @@ void loop()
           if(lcd && lcdReporting)
           {
             float f = 0.999999*float(analogData)/1023.;
-            sprintf(lcdBuf,"A%d:%d.%02d ", analogPin, (int)f, (int)(f*100)%100);
+            snprintf_P(lcdBuf, sizeof(lcdBuf), PSTR("A%d:%d.%02d "), analogPin, (int)f, (int)(f*100)%100);
             if(pinIdx == reportPin)
             {
               lcd -> setCursor(0,0);
