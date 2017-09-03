@@ -99,7 +99,7 @@ byte lcdPort = 0x27;
 byte lcdColumns = 16;
 byte lcdRows = 2;
 
-bool lcdReporting = false;
+byte lcdReporting = false;
 unsigned short int reportPin = 0; // currently being reported
 unsigned long previousLCDMillis = 0;
 
@@ -191,7 +191,7 @@ byte portConfigInputs[TOTAL_PORTS];  // each bit: 1 = pin in (any) INPUT, 0 = an
 unsigned long currentMillis;        // store the current value from millis()
 unsigned long previousMillis;       // for comparison with currentMillis
 unsigned long lastSerialMillis = 0;       // for comparison with currentMillis
-int lcdInterval = 4000;
+int lcdInterval = 4000; // TODO: make configurable
 
 
 unsigned int samplingInterval = DEFAULT_SAMPLING_INTERVAL; // how often to run the main loop (in ms)
@@ -1308,7 +1308,7 @@ void loop()
     previousMillis = currentMillis;
     if(vwTxPin)
       checkDigitalInputs(true);
-    if(reportPINs[0] || reportPINs[1])
+    if(lcd && lcdReporting && (reportPINs[0] || reportPINs[1]))
     {
       for(unsigned short int port=0; port<2; port++)
       {
