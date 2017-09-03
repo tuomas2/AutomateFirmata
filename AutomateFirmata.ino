@@ -158,6 +158,7 @@ static const int EEPROM_LCD_COLUMNS = 12;
 static const int EEPROM_LCD_ROWS = 13;
 static const int EEPROM_CONFIGURED = 14;
 static const int EEPROM_CONFIG_VERSION = 15;
+static const int EEPROM_LCD_REPORTING = 16;
 
 static const int EEPROM_DIGITAL_INPUTS_TO_REPORT = 50; // size required: TOTAL_PORTS x 1 byte
 static const int EEPROM_PORT_CONFIG_INPUTS = 100; // size required: TOTAL_PORTS x 1 byte
@@ -543,7 +544,6 @@ void configureLcd()
 {
   if(lcd)
   {
-    //delete lcd;
     lcd = NULL;
   } 
   if(lcdPort)
@@ -741,6 +741,7 @@ void sysexCallback(byte command, byte argc, byte *argv)
           break;
         case LCD_SET_REPORTING:
           lcdReporting = argv[1];
+          EEPROM.update(EEPROM_LCD_REPORTING, lcdReporting);
           break;
       }
     case SYSEX_KEEP_ALIVE:
@@ -1066,6 +1067,17 @@ void hardReset()
   virtualWireSpeed = DEFAULT_VIRTUALWIRE_SPEED;
   samplingInterval = DEFAULT_SAMPLING_INTERVAL;
 
+  lcd = NULL;
+  lcdPort = 0;
+  lcdColumns = 0;
+  lcdRows = 0;
+  lcdReporting = true;
+  
+  EEPROM.update(EEPROM_LCD_PORT, lcdPort);
+  EEPROM.update(EEPROM_LCD_COLUMNS, lcdColumns);
+  EEPROM.update(EEPROM_LCD_ROWS, lcdRows);
+  EEPROM.update(EEPROM_LCD_REPORTING, lcdReporting);
+
   EEPROM.update(EEPROM_VIRTUALWIRE_TX_PIN, vwTxPin);
   EEPROM.update(EEPROM_VIRTUALWIRE_RX_PIN, vwRxPin);
   EEPROM.update(EEPROM_VIRTUALWIRE_PTT_PIN, vwPttPin);
@@ -1206,6 +1218,7 @@ bool readEepromConfig()
   lcdPort = EEPROM.read(EEPROM_LCD_PORT);
   lcdColumns = EEPROM.read(EEPROM_LCD_COLUMNS);
   lcdRows = EEPROM.read(EEPROM_LCD_ROWS);
+  lcdReporting = EEPROM.read(EEPROM_LCD_REPORTING);
   configureLcd();
   return true;
 }
