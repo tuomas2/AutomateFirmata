@@ -99,7 +99,7 @@ byte lcdPort = 0x27;
 byte lcdColumns = 16;
 byte lcdRows = 2;
 
-bool lcdReporting = true;
+bool lcdReporting = false;
 unsigned short int reportPin = 0; // currently being reported
 unsigned long previousLCDMillis = 0;
 
@@ -169,7 +169,7 @@ static const int EEPROM_I2C_QUERY_INDEX = 201;
 static const int EEPROM_I2C_QUERY = 202; // sizeof(i2c_device_info)*queryIndex
 
 static const byte IS_CONFIGURED = 0b10101010;
-static const byte CONFIG_VERSION = 3;
+static const byte CONFIG_VERSION = 4;
 
 
 
@@ -713,9 +713,11 @@ void sysexCallback(byte command, byte argc, byte *argv)
       lcdPort = argv[0];
       lcdColumns = argv[1];
       lcdRows = argv[2];
+      lcdReporting = argv[3];
       EEPROM.update(EEPROM_LCD_PORT, lcdPort);
       EEPROM.update(EEPROM_LCD_COLUMNS, lcdColumns);
       EEPROM.update(EEPROM_LCD_ROWS, lcdRows);
+      EEPROM.update(EEPROM_LCD_REPORTING, lcdReporting);
       configureLcd();
       break;
     case SYSEX_LCD_COMMAND:
@@ -1071,7 +1073,7 @@ void hardReset()
   lcdPort = 0;
   lcdColumns = 0;
   lcdRows = 0;
-  lcdReporting = true;
+  lcdReporting = false;
   
   EEPROM.update(EEPROM_LCD_PORT, lcdPort);
   EEPROM.update(EEPROM_LCD_COLUMNS, lcdColumns);
