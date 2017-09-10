@@ -47,7 +47,7 @@
 
 
 
-#define DEBUG 1
+#define DEBUG 0
 
 #if DEBUG
   char tmpBuf[64];
@@ -126,6 +126,7 @@ static const byte SYSEX_KEEP_ALIVE = 0x01;
 static const byte SYSEX_SETUP_VIRTUALWIRE = 0x02;
 static const byte SYSEX_SETUP_LCD = 0x03;
 static const byte SYSEX_LCD_COMMAND = 0x04;
+static const byte SYSEX_SET_ANALOG_REFERENCE = 0x05;
 
 // LCD command bytes
 static const byte LCD_SET_BACKLIGHT = 0x01;
@@ -159,6 +160,7 @@ static const int EEPROM_LCD_ROWS = 13;
 static const int EEPROM_CONFIGURED = 14;
 static const int EEPROM_CONFIG_VERSION = 15;
 static const int EEPROM_LCD_REPORTING = 16;
+static const int EEPROM_ANALOG_REFERENCE = 17;
 
 static const int EEPROM_DIGITAL_INPUTS_TO_REPORT = 50; // size required: TOTAL_PORTS x 1 byte
 static const int EEPROM_PORT_CONFIG_INPUTS = 100; // size required: TOTAL_PORTS x 1 byte
@@ -169,7 +171,7 @@ static const int EEPROM_I2C_QUERY_INDEX = 201;
 static const int EEPROM_I2C_QUERY = 202; // sizeof(i2c_device_info)*queryIndex
 
 static const byte IS_CONFIGURED = 0b10101010;
-static const byte CONFIG_VERSION = 4;
+static const byte CONFIG_VERSION = 6;
 
 
 
@@ -179,6 +181,8 @@ SerialFirmata serialFeature;
 
 /* analog inputs */
 int analogInputsToReport = 0; // bitwise array to store pin reporting
+
+byte analogReferenceVar = DEFAULT; 
 
 /* digital input ports */
 byte reportPINs[TOTAL_PORTS];       // 1 = report this port, 0 = silence. 1 port == 8 pins.
@@ -548,6 +552,7 @@ void configureLcd()
   } 
   if(lcdPort)
   {
+    dbgf("LCD %d %d %d", lcdPort, lcdColumns, lcdRows);
     lcd0 = LiquidCrystal_I2C(lcdPort, lcdColumns, lcdRows);
     lcd = &lcd0;
     lcd->begin();
@@ -561,6 +566,7 @@ void configureLcd()
 
 void configureVirtualWire()
 {
+  dbgf("VW: %d %d %d %d", vwRxPin, vwTxPin, vwPttPin, virtualWireSpeed);
   if(virtualWireSpeed < 1 || virtualWireSpeed > 9)
     virtualWireSpeed = DEFAULT_VIRTUALWIRE_SPEED;
   vw_rx_stop();
@@ -571,7 +577,7 @@ void configureVirtualWire()
     vw_set_tx_pin(vwTxPin);
   if(vwPttPin)
     vw_set_ptt_pin(vwPttPin);
-  if(!(portConfigInputs[wakeUpPin/8] && (1<<wakeUpPin))) // if not already configured as input 
+  if(wakeUpPin && !(portConfigInputs[wakeUpPin/8] && (1<<wakeUpPin))) // if not already configured as input 
     pinMode(wakeUpPin, INPUT);
   if(virtualWireSpeed && (vwTxPin || vwRxPin))
   {
@@ -767,6 +773,10 @@ void sysexCallback(byte command, byte argc, byte *argv)
       EEPROM.update(EEPROM_DEVICE_ID, deviceId);
       configureVirtualWire();
       break;
+    case SYSEX_SET_ANALOG_REFERENCE:
+        analogReferenceVar = argv[0];
+        EEPROM.update(EEPROM_ANALOG_REFERENCE, analogReferenceVar);
+        analogReference(analogReferenceVar);
     case SYSEX_VIRTUALWIRE_MESSAGE:
       blink();
       if(vwTxPin)
@@ -1057,8 +1067,12 @@ void hardReset()
   }
 
   analogInputsToReport = 0;
-
+  
   EEPROM.put(EEPROM_ANALOG_INPUTS_TO_REPORT, (int)0);
+  
+  analogReferenceVar = DEFAULT; 
+  analogReference(DEFAULT);
+  EEPROM.update(EEPROM_ANALOG_REFERENCE, analogReferenceVar);
 
   vw_rx_stop();
   vw_tx_stop();
@@ -1208,6 +1222,7 @@ bool readEepromConfig()
     portConfigInputs[port] = EEPROM.read(EEPROM_PORT_CONFIG_INPUTS + port); 
   }
 
+  dbg("Reading I2C config...");
   for(int q=0; q<queryIndex; q++)
     EEPROM.get(EEPROM_I2C_QUERY + q*sizeof(i2c_device_info), query[q]);
   
@@ -1215,13 +1230,19 @@ bool readEepromConfig()
     enableI2CPins();
 
   EEPROM.get(EEPROM_ANALOG_INPUTS_TO_REPORT, analogInputsToReport);
+  analogReferenceVar = EEPROM.read(EEPROM_ANALOG_REFERENCE);
+  analogReference(analogReferenceVar);
+  dbg("VW config");
   configureVirtualWire();
   
+  dbg("LCD config");
   lcdPort = EEPROM.read(EEPROM_LCD_PORT);
   lcdColumns = EEPROM.read(EEPROM_LCD_COLUMNS);
   lcdRows = EEPROM.read(EEPROM_LCD_ROWS);
   lcdReporting = EEPROM.read(EEPROM_LCD_REPORTING);
   configureLcd();
+  
+  checkDigitalInputs(true);
   return true;
 }
 
