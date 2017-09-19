@@ -113,6 +113,7 @@ uint8_t wakeUpPin = 0; // 2 or 3
 uint8_t virtualWireSpeed = DEFAULT_VIRTUALWIRE_SPEED; // * 1000 bits per second 
 
 boolean serialEnabled = true;
+boolean instantDigitalReporting = true;
 
 period_t sleepMode = SLEEP_1S;
 int sleepTime = 1000;
@@ -127,6 +128,7 @@ static const byte SYSEX_SETUP_VIRTUALWIRE = 0x02;
 static const byte SYSEX_SETUP_LCD = 0x03;
 static const byte SYSEX_LCD_COMMAND = 0x04;
 static const byte SYSEX_SET_ANALOG_REFERENCE = 0x05;
+static const byte SYSEX_SET_INSTANT_DIGITAL_REPORTING = 0x06;
 
 // LCD command bytes
 static const byte LCD_SET_BACKLIGHT = 0x01;
@@ -161,6 +163,7 @@ static const int EEPROM_CONFIGURED = 14;
 static const int EEPROM_CONFIG_VERSION = 15;
 static const int EEPROM_LCD_REPORTING = 16;
 static const int EEPROM_ANALOG_REFERENCE = 17;
+static const int EEPROM_INSTANT_DIGITAL_REPORTING = 18;
 
 static const int EEPROM_DIGITAL_INPUTS_TO_REPORT = 50; // size required: TOTAL_PORTS x 1 byte
 static const int EEPROM_PORT_CONFIG_INPUTS = 100; // size required: TOTAL_PORTS x 1 byte
@@ -171,7 +174,7 @@ static const int EEPROM_I2C_QUERY_INDEX = 201;
 static const int EEPROM_I2C_QUERY = 202; // sizeof(i2c_device_info)*queryIndex
 
 static const byte IS_CONFIGURED = 0b10101010;
-static const byte CONFIG_VERSION = 6;
+static const byte CONFIG_VERSION = 7;
 
 
 
@@ -777,6 +780,11 @@ void sysexCallback(byte command, byte argc, byte *argv)
         analogReferenceVar = argv[0];
         EEPROM.update(EEPROM_ANALOG_REFERENCE, analogReferenceVar);
         analogReference(analogReferenceVar);
+        break;
+    case SYSEX_SET_INSTANT_DIGITAL_REPORTING:
+        instantDigitalReporting = argv[0];
+        EEPROM.update(EEPROM_INSTANT_DIGITAL_REPORTING, instantDigitalReporting);
+        break;
     case SYSEX_VIRTUALWIRE_MESSAGE:
       blink();
       if(vwTxPin)
@@ -1073,6 +1081,8 @@ void hardReset()
   analogReferenceVar = DEFAULT; 
   analogReference(DEFAULT);
   EEPROM.update(EEPROM_ANALOG_REFERENCE, analogReferenceVar);
+  instantDigitalReporting = true;
+  EEPROM.update(EEPROM_INSTANT_DIGITAL_REPORTING, instantDigitalReporting);
 
   vw_rx_stop();
   vw_tx_stop();
@@ -1232,6 +1242,8 @@ bool readEepromConfig()
   EEPROM.get(EEPROM_ANALOG_INPUTS_TO_REPORT, analogInputsToReport);
   analogReferenceVar = EEPROM.read(EEPROM_ANALOG_REFERENCE);
   analogReference(analogReferenceVar);
+  instantDigitalReporting = EEPROM.read(EEPROM_INSTANT_DIGITAL_REPORTING);
+
   dbg("VW config");
   configureVirtualWire();
   
