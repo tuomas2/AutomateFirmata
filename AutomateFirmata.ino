@@ -1300,7 +1300,7 @@ void loop()
   unsigned short int pinIdx = 0;
   unsigned short int lastPin = 0;
 
-  if(!vwTxPin || wakeUpPin)
+  if((!vwTxPin || wakeUpPin) && instantDigitalReporting)
     checkDigitalInputs(false);
 
   if(blinkMillis && (currentMillis >= blinkMillis + BLINK_INTERVAL))
@@ -1339,8 +1339,8 @@ void loop()
   pinIdx = 0;
   if (currentMillis - previousMillis >= samplingInterval) {
     previousMillis = currentMillis;
-    if(vwTxPin)
-      checkDigitalInputs(true);
+    if(vwTxPin || !instantDigitalReporting)
+      checkDigitalInputs((bool)vwTxPin);
     if(lcd && lcdReporting && (reportPINs[0] || reportPINs[1]))
     {
       for(unsigned short int port=0; port<2; port++)
