@@ -114,6 +114,7 @@ uint8_t virtualWireSpeed = DEFAULT_VIRTUALWIRE_SPEED; // * 1000 bits per second
 
 boolean serialEnabled = true;
 boolean instantDigitalReporting = true;
+unsigned long digitalOutputMillis = 0;
 
 period_t sleepMode = SLEEP_1S;
 int sleepTime = 1000;
@@ -423,6 +424,7 @@ void outputPort(byte portNumber, byte portValue, byte forceSend)
       Firmata.sendDigitalPort(portNumber, portValue);
     previousPINs[portNumber] = portValue;
     sendVirtualWireDigitalOutput(portNumber, portValue);
+    digitalOutputMillis = currentMillis;
   }
 }
 
@@ -1300,15 +1302,6 @@ void loop()
   unsigned short int pinIdx = 0;
   unsigned short int lastPin = 0;
 
-  if((!vwTxPin || wakeUpPin) && instantDigitalReporting)
-    checkDigitalInputs(false);
-
-  if(blinkMillis && (currentMillis >= blinkMillis + BLINK_INTERVAL))
-  {
-    digitalWrite(BLINK_PIN, LOW);
-    blinkMillis = 0;
-  }
-
   if(vwTxPin && !vwRxPin && !serialEnabled)
   {
     vw_wait_tx();
@@ -1322,6 +1315,16 @@ void loop()
   else
     currentMillis = millis();
 
+  bool checkImmediately = instantDigitalReporting || (currentMillis >= digitalOutputMillis + samplingInterval);
+  if((!vwTxPin || wakeUpPin) && checkImmediately)
+  { 
+    checkDigitalInputs(false);
+  }
+  if(blinkMillis && (currentMillis >= blinkMillis + BLINK_INTERVAL))
+  {
+    digitalWrite(BLINK_PIN, LOW);
+    blinkMillis = 0;
+  }
 
   /* STREAMREAD - processing incoming messagse as soon as possible, while still
    * checking digital inputs.  */
@@ -1333,11 +1336,11 @@ void loop()
   }
   // TODO - ensure that Stream buffer doesn't go over 60 bytes
 
-  if(vwTxPin && serialEnabled && currentMillis - lastSerialMillis > SERIAL_SHUTDOWN_TIME)
+  if(vwTxPin && serialEnabled && currentMillis >= lastSerialMillis + SERIAL_SHUTDOWN_TIME)
     serialEnabled = false;
   
   pinIdx = 0;
-  if (currentMillis - previousMillis >= samplingInterval) {
+  if (currentMillis >= previousMillis + samplingInterval) {
     previousMillis = currentMillis;
     if(vwTxPin || !instantDigitalReporting)
       checkDigitalInputs((bool)vwTxPin);
