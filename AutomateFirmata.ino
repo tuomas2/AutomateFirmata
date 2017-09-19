@@ -186,6 +186,13 @@ SerialFirmata serialFeature;
 /* analog inputs */
 int analogInputsToReport = 0; // bitwise array to store pin reporting
 
+
+#define ANALOG_PINS 6
+
+static const int ANALOG_SAMPLING = 100;
+unsigned long analogPinData[ANALOG_PINS];
+unsigned long analogDataCount = 0;
+
 byte analogReferenceVar = DEFAULT; 
 
 /* digital input ports */
@@ -196,8 +203,9 @@ byte previousPINs[TOTAL_PORTS];     // previous 8 bits sent
 byte portConfigInputs[TOTAL_PORTS];  // each bit: 1 = pin in (any) INPUT, 0 = anything else
 
 /* timer variables */
-unsigned long currentMillis;        // store the current value from millis()
-unsigned long previousMillis;       // for comparison with currentMillis
+unsigned long currentMillis = 0;        // store the current value from millis()
+unsigned long previousMillis = 0;       // for comparison with currentMillis
+unsigned long previousAnalogMillis = 0;
 unsigned long lastSerialMillis = 0;       // for comparison with currentMillis
 int lcdInterval = 4000; // TODO: make configurable
 
@@ -757,6 +765,7 @@ void sysexCallback(byte command, byte argc, byte *argv)
           EEPROM.update(EEPROM_LCD_REPORTING, lcdReporting);
           break;
       }
+      break;
     case SYSEX_KEEP_ALIVE:
       dbg("I'm alive!");
       break;
@@ -1289,6 +1298,9 @@ void setup()
     ; // wait for serial port to connect. Needed for ATmega32u4-based boards and Arduino 101
   }
   systemResetCallbackFunc(true);
+  for(int i=0; i<ANALOG_PINS; i++)
+    analogPinData[i] = 0;
+
   dbg("Setup ready.");
 }
 
@@ -1339,6 +1351,15 @@ void loop()
   if(vwTxPin && serialEnabled && currentMillis >= lastSerialMillis + SERIAL_SHUTDOWN_TIME)
     serialEnabled = false;
   
+  if(currentMillis >= previousAnalogMillis + ANALOG_SAMPLING)
+  {
+    previousAnalogMillis = currentMillis;
+    for(analogPin = 0; analogPin < 6; analogPin++)
+        if (analogInputsToReport & (1 << analogPin))
+          analogPinData[analogPin] += analogRead(analogPin);
+    analogDataCount ++; 
+  }
+
   pinIdx = 0;
   if (currentMillis >= previousMillis + samplingInterval) {
     previousMillis = currentMillis;
@@ -1380,7 +1401,11 @@ void loop()
       if (IS_PIN_ANALOG(pin) && Firmata.getPinMode(pin) == PIN_MODE_ANALOG) {
         analogPin = PIN_TO_ANALOG(pin);
         if (analogInputsToReport & (1 << analogPin)) {
-          analogData = analogRead(analogPin);
+          if(analogPin < ANALOG_PINS)
+            analogData = analogPinData[analogPin] / analogDataCount;
+          else
+            analogData = analogRead(analogPin);
+            
           if(serialEnabled)
             Firmata.sendAnalog(analogPin, analogData);
           sendVirtualWireAnalogOutput(analogPin, analogData);
@@ -1414,6 +1439,11 @@ void loop()
         }
       }
     }
+    for(int i=0; i<ANALOG_PINS; i++)
+      analogPinData[i] = 0;
+    dbgf("Analog data count: %d", analogDataCount);
+    analogDataCount = 0;
+    
     // report i2c data for all device with read continuous mode enabled
     if (queryIndex > -1) {
       for (byte i = 0; i < queryIndex + 1; i++) {
