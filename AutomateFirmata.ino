@@ -189,7 +189,7 @@ int analogInputsToReport = 0; // bitwise array to store pin reporting
 
 #define ANALOG_PINS 6
 
-static const int ANALOG_SAMPLING = 100;
+static const int ANALOG_SAMPLING = 50;
 unsigned long analogPinData[ANALOG_PINS];
 unsigned long analogDataCount = 0;
 
@@ -1166,6 +1166,7 @@ inline void readVirtualWire()
   uint8_t buflen = VW_MAX_MESSAGE_LEN;
   if (vw_get_message(buf, &buflen))
   {
+    dbgf("Vw message %s", buf)
     if (buflen < HEADER_LENGTH + 1) return; // our headers and at least 1 bytes of data
 
     uint8_t homeAddress = buf[0];
@@ -1175,6 +1176,13 @@ inline void readVirtualWire()
 
     uint8_t *arg1 = &buf[4];
     uint8_t *arg2 = &buf[5];
+    dbgf("VW msg: home: %d sender %d recipient %d arg1 %d arg2 %d",
+         homeAddress,
+         senderAddress,
+         recipientAddress,
+         command,
+         *arg1,
+         *arg2)
     // check correct address and ignore if not ours
     if (homeAddress == homeId && (recipientAddress == deviceId || recipientAddress == BROADCAST_RECIPIENT))
     {
@@ -1401,7 +1409,7 @@ void loop()
       if (IS_PIN_ANALOG(pin) && Firmata.getPinMode(pin) == PIN_MODE_ANALOG) {
         analogPin = PIN_TO_ANALOG(pin);
         if (analogInputsToReport & (1 << analogPin)) {
-          if(analogPin < ANALOG_PINS)
+          if(analogPin < ANALOG_PINS && analogDataCount)
             analogData = analogPinData[analogPin] / analogDataCount;
           else
             analogData = analogRead(analogPin);
