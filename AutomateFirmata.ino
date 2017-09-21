@@ -189,7 +189,7 @@ int analogInputsToReport = 0; // bitwise array to store pin reporting
 
 #define ANALOG_PINS 6
 
-static const int ANALOG_SAMPLING = 50;
+static const int ANALOG_SAMPLING = 10;
 unsigned long analogPinData[ANALOG_PINS];
 unsigned long analogDataCount = 0;
 
