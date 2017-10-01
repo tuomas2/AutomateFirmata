@@ -243,20 +243,12 @@ void sysexCallback(byte, byte, byte*);
 /* utility functions */
 void wireWrite(byte data)
 {
-#if ARDUINO >= 100
   Wire.write((byte)data);
-#else
-  Wire.send(data);
-#endif
 }
 
 byte wireRead(void)
 {
-#if ARDUINO >= 100
   return Wire.read();
-#else
-  return Wire.receive();
-#endif
 }
 
 /*==============================================================================
@@ -494,10 +486,6 @@ void setPinModeCallback(byte pin, int mode)
       if (IS_PIN_ANALOG(pin)) {
         if (IS_PIN_DIGITAL(pin)) {
           pinMode(PIN_TO_DIGITAL(pin), INPUT);    // disable output driver
-#if ARDUINO <= 100
-          // deprecated since Arduino 1.0.1 - TODO: drop support in Firmata 2.6
-          digitalWrite(PIN_TO_DIGITAL(pin), LOW); // disable internal pull-ups
-#endif
         }
         Firmata.setPinMode(pin, PIN_MODE_ANALOG);
       }
@@ -505,10 +493,6 @@ void setPinModeCallback(byte pin, int mode)
     case INPUT:
       if (IS_PIN_DIGITAL(pin)) {
         pinMode(PIN_TO_DIGITAL(pin), INPUT);    // disable output driver
-#if ARDUINO <= 100
-        // deprecated since Arduino 1.0.1 - TODO: drop support in Firmata 2.6
-        digitalWrite(PIN_TO_DIGITAL(pin), LOW); // disable internal pull-ups
-#endif
         Firmata.setPinMode(pin, INPUT);
       }
       break;
@@ -647,12 +631,7 @@ void digitalWriteCallback(byte port, int value)
             pinWriteMask |= mask;
           } else if (Firmata.getPinMode(pin) == INPUT && pinValue == 1 && Firmata.getPinState(pin) != 1) {
             // only handle INPUT here for backwards compatibility
-#if ARDUINO > 100
             pinMode(pin, INPUT_PULLUP);
-#else
-            // only write to the INPUT pin to enable pullups if Arduino v1.0.0 or earlier
-            pinWriteMask |= mask;
-#endif
           }
           Firmata.setPinState(pin, pinValue);
         }
