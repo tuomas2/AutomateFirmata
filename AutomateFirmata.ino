@@ -47,7 +47,7 @@
 
 
 
-#define DEBUG 0
+#define DEBUG 1
 
 #if DEBUG
   char tmpBuf[64];
@@ -538,6 +538,7 @@ void setPinModeCallback(byte pin, int mode)
       dbg("Unknown pin mode");
       return;
   }
+  dbgf("W: Pin %d mode changed to %d", pin, mode);
   EEPROM.update(EEPROM_PIN_MODES + pin, mode);
 }
 
