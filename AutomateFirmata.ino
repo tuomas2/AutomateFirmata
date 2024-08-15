@@ -1,9 +1,22 @@
+//#define LOWPOWER
+//#define VIRTUALWIRE
+//#define LIQUIDCRYSTAL
+
 #include <Firmata.h>
 #include <EEPROM.h>
 #include <Wire.h>
-#include <LowPower.h>
-#include <VirtualWire.h>
-#include <LiquidCrystal_I2C.h>
+
+#ifdef LOWPOWER
+   #include <LowPower.h>
+#endif
+
+#ifdef VIRTUALWIRE
+  #include <VirtualWire.h>
+#endif
+
+#ifdef LIQUIDCRYSTAL
+  #include <LiquidCrystal_I2C.h>
+#endif
 
 /*
 
@@ -89,9 +102,13 @@ extern "C"
  *============================================================================*/
 
 
-
+#ifdef LIQUIDCRYSTAL
 LiquidCrystal_I2C *lcd = NULL;
 LiquidCrystal_I2C lcd0(0x27, 16, 2);
+#else
+int lcd = 0;
+#endif
+
 
 char lcdBuf[20];  
 
@@ -116,7 +133,9 @@ boolean serialEnabled = true;
 boolean instantDigitalReporting = true;
 unsigned long digitalOutputMillis = 0;
 
+#ifdef LOWPOWER
 period_t sleepMode = SLEEP_1S;
+#endif 
 int sleepTime = 1000;
 
 static const int BROADCAST_RECIPIENT = 0xFF;
@@ -383,6 +402,7 @@ void readAndReportData(byte address, int theRegister, byte numBytes, byte stopTX
 
 void sendVirtualWireDigitalOutput(byte portNumber, byte portValue)
 {
+  #ifdef VIRTUALWIRE
   if(!vwTxPin)
     return;
 
@@ -395,10 +415,12 @@ void sendVirtualWireDigitalOutput(byte portNumber, byte portValue)
   data[5] = portValue;
   blink();
   vw_send(data, sizeof(data));
+  #endif
 }
 
 void sendVirtualWireAnalogOutput(byte pinNumber, int analogData)
 {
+  #ifdef VIRTUALWIRE
   if(!vwTxPin)
     return;
 
@@ -411,7 +433,8 @@ void sendVirtualWireAnalogOutput(byte pinNumber, int analogData)
   data[5] = analogData >> 8; // msb
   data[6] = analogData;      // lsb
   blink();
-  vw_send(data, sizeof(data));  
+  vw_send(data, sizeof(data));
+  #endif  
 }
 
 void outputPort(byte portNumber, byte portValue, byte forceSend)
@@ -423,7 +446,9 @@ void outputPort(byte portNumber, byte portValue, byte forceSend)
     if(serialEnabled)
       Firmata.sendDigitalPort(portNumber, portValue);
     previousPINs[portNumber] = portValue;
+    #ifdef VIRTUALWIRE
     sendVirtualWireDigitalOutput(portNumber, portValue);
+    #endif
     digitalOutputMillis = currentMillis;
   }
 }
@@ -544,6 +569,7 @@ void setPinModeCallback(byte pin, int mode)
 
 void configureLcd()
 {
+  #ifdef LIQUIDCRYSTAL
   if(lcd)
   {
     lcd = NULL;
@@ -560,10 +586,12 @@ void configureLcd()
     lcd->setCursor(0,0);
     lcd->setBacklight(false);
   }
+  #endif
 }
 
 void configureVirtualWire()
 {
+  #ifdef VIRTUALWIRE
   dbgf("VW: %d %d %d %d", vwRxPin, vwTxPin, vwPttPin, virtualWireSpeed);
   if(virtualWireSpeed < 1 || virtualWireSpeed > 9)
     virtualWireSpeed = DEFAULT_VIRTUALWIRE_SPEED;
@@ -583,6 +611,7 @@ void configureVirtualWire()
     if(vwRxPin)
       vw_rx_start();
   }
+  #endif
 }
 
 /*
@@ -720,6 +749,7 @@ void sysexCallback(byte command, byte argc, byte *argv)
       configureLcd();
       break;
     case SYSEX_LCD_COMMAND:
+      #ifdef LIQUIDCRYSTAL
       if(!lcd)
         return;
       
@@ -745,6 +775,7 @@ void sysexCallback(byte command, byte argc, byte *argv)
           EEPROM.update(EEPROM_LCD_REPORTING, lcdReporting);
           break;
       }
+      #endif
       break;
     case SYSEX_KEEP_ALIVE:
       dbg("I'm alive!");
@@ -777,9 +808,11 @@ void sysexCallback(byte command, byte argc, byte *argv)
         EEPROM.update(EEPROM_INSTANT_DIGITAL_REPORTING, instantDigitalReporting);
         break;
     case SYSEX_VIRTUALWIRE_MESSAGE:
+      #ifdef VIRTUALWIRE
       blink();
       if(vwTxPin)
         vw_send(argv, argc);
+      #endif
       break;
     case I2C_REQUEST:
       mode = argv[1] & I2C_READ_WRITE_MODE_MASK;
@@ -984,6 +1017,7 @@ void sysexCallback(byte command, byte argc, byte *argv)
 
 void setSleepMode()
 {
+  #ifdef LOWPOWER
   if(samplingInterval >= 8000) 
   {
     sleepMode = SLEEP_8S;
@@ -1034,6 +1068,7 @@ void setSleepMode()
     sleepMode = SLEEP_15MS;
     sleepTime = 15;
   }
+  #endif
 }
 
 void hardReset()
@@ -1074,7 +1109,7 @@ void hardReset()
   EEPROM.update(EEPROM_ANALOG_REFERENCE, analogReferenceVar);
   instantDigitalReporting = true;
   EEPROM.update(EEPROM_INSTANT_DIGITAL_REPORTING, instantDigitalReporting);
-
+  #ifdef VIRTUALWIRE
   vw_rx_stop();
   vw_tx_stop();
   vwRxPin = 0;
@@ -1083,7 +1118,8 @@ void hardReset()
   wakeUpPin = 0;
   virtualWireSpeed = DEFAULT_VIRTUALWIRE_SPEED;
   samplingInterval = DEFAULT_SAMPLING_INTERVAL;
-
+  #endif
+  #ifdef LIQUIDCRYSTAL
   lcd = NULL;
   lcdPort = 0;
   lcdColumns = 0;
@@ -1094,13 +1130,15 @@ void hardReset()
   EEPROM.update(EEPROM_LCD_COLUMNS, lcdColumns);
   EEPROM.update(EEPROM_LCD_ROWS, lcdRows);
   EEPROM.update(EEPROM_LCD_REPORTING, lcdReporting);
-
+  #endif
+  #ifdef VIRTUALWIRE
   EEPROM.update(EEPROM_VIRTUALWIRE_TX_PIN, vwTxPin);
   EEPROM.update(EEPROM_VIRTUALWIRE_RX_PIN, vwRxPin);
   EEPROM.update(EEPROM_VIRTUALWIRE_PTT_PIN, vwPttPin);
-  EEPROM.update(EEPROM_WAKEUP_PIN, wakeUpPin);
   EEPROM.update(EEPROM_VIRTUALWIRE_SPEED, virtualWireSpeed);
+  EEPROM.update(EEPROM_WAKEUP_PIN, wakeUpPin);
   EEPROM.put(EEPROM_SAMPLING_INTERVAL, samplingInterval);
+  #endif
   EEPROM.update(EEPROM_CONFIGURED, IS_CONFIGURED);
   EEPROM.update(EEPROM_CONFIG_VERSION, CONFIG_VERSION);
 }
@@ -1142,6 +1180,7 @@ void blink()
 
 inline void readVirtualWire()
 {
+  #ifdef VIRTUALWIRE
   uint8_t buf[VW_MAX_MESSAGE_LEN];
   uint8_t buflen = VW_MAX_MESSAGE_LEN;
   if (vw_get_message(buf, &buflen))
@@ -1198,6 +1237,7 @@ inline void readVirtualWire()
       }
     }
   }
+  #endif
 }
 
 bool readEepromConfig()
@@ -1208,6 +1248,7 @@ bool readEepromConfig()
   if(configured != IS_CONFIGURED || config_version != CONFIG_VERSION)
     return false;
 
+  #ifdef VIRTUALWIRE
   homeId = EEPROM.read(EEPROM_HOME_ID);
   deviceId = EEPROM.read(EEPROM_DEVICE_ID);
   EEPROM.get(EEPROM_SAMPLING_INTERVAL, samplingInterval);
@@ -1216,6 +1257,7 @@ bool readEepromConfig()
   vwPttPin = EEPROM.read(EEPROM_VIRTUALWIRE_PTT_PIN);
   wakeUpPin = EEPROM.read(EEPROM_WAKEUP_PIN);
   virtualWireSpeed = EEPROM.read(EEPROM_VIRTUALWIRE_SPEED);
+  #endif
   isI2CEnabled = EEPROM.read(EEPROM_IS_I2C_ENABLED);  
   queryIndex = (signed char)EEPROM.read(EEPROM_I2C_QUERY_INDEX);  
   
@@ -1247,12 +1289,13 @@ bool readEepromConfig()
   configureVirtualWire();
   
   dbg("LCD config");
+  #ifdef LIQUIDCRYSTAL
   lcdPort = EEPROM.read(EEPROM_LCD_PORT);
   lcdColumns = EEPROM.read(EEPROM_LCD_COLUMNS);
   lcdRows = EEPROM.read(EEPROM_LCD_ROWS);
   lcdReporting = EEPROM.read(EEPROM_LCD_REPORTING);
   configureLcd();
-  
+  #endif
   checkDigitalInputs(true);
   return true;
 }
@@ -1260,9 +1303,11 @@ bool readEepromConfig()
 void setup()
 { 
   // Disable vw pins initially by setting them to invalid value
+  #ifdef VIRTUALWIRE
   vw_set_ptt_pin(255); 
   vw_set_tx_pin(255); 
   vw_set_rx_pin(255);
+  #endif
 
   Firmata.setFirmwareVersion(FIRMATA_FIRMWARE_MAJOR_VERSION, FIRMATA_FIRMWARE_MINOR_VERSION);
 
@@ -1304,12 +1349,16 @@ void loop()
 
   if(vwTxPin && !vwRxPin && !serialEnabled)
   {
+    #ifdef VIRTUALWIRE
     vw_wait_tx();
+    #endif
+    #ifdef LOWPOWER
     if(wakeUpPin)
       attachInterrupt(0, wakeUp, CHANGE);
     LowPower.powerDown(sleepMode, ADC_OFF, BOD_OFF);
     if(wakeUpPin)
       detachInterrupt(0);
+    #endif  
     currentMillis += sleepTime;
   }
   else
@@ -1371,6 +1420,7 @@ void loop()
                    bool(v & (1<<6)),
                    bool(v & (1<<7))
                 );
+        #ifdef LIQUIDCRYSTAL        
         if(reportPINs[0] && pinIdx == reportPin)
         {
           lcd -> setCursor(0,0);
@@ -1381,6 +1431,7 @@ void loop()
           lcd -> setCursor(0,1);
           lcd -> print(lcdBuf);
         }
+        #endif
         pinIdx ++;
       }
       pinIdx += 2;
@@ -1401,6 +1452,7 @@ void loop()
           {
             float f = 0.999999*float(analogData)/1023.;
             snprintf_P(lcdBuf, sizeof(lcdBuf), PSTR("A%d:%d.%02d "), analogPin, (int)f, (int)(f*100)%100);
+            #ifdef LIQUIDCRYSTAL
             if(pinIdx == reportPin)
             {
               lcd -> setCursor(0,0);
@@ -1422,6 +1474,7 @@ void loop()
               lcd -> setCursor(8,1);
               lcd -> print(lcdBuf);
             }
+            #endif
           }
           pinIdx++;
         }
