@@ -15,7 +15,7 @@ Please also note:
  - Servo support removed (conflicts with VirtualWire due to use of Timer1).
  - If PWM is used on Pins 3 or 11, timer2 divider is set to 1, resulting in 31.25 KHz PWM frequency. 
 
-Requires the following libraries:
+Optionally requires the following libraries (see #define constants in the beginning of file):
  - VirtualWire: http://www.airspayce.com/mikem/arduino/VirtualWire/VirtualWire-1.27.zip 
    (see http://www.airspayce.com/mikem/arduino/VirtualWire/)
  - Low-Power: https://github.com/rocketscream/Low-Power (tested at commit 530e8e7)
