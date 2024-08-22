@@ -60,7 +60,7 @@
 
 
 
-#define DEBUG 1
+#define DEBUG 0
 
 #if DEBUG
   char tmpBuf[64];
@@ -1326,7 +1326,7 @@ void setup()
   // Serial1.begin(57600);
   // Firmata.begin(Serial1);
   // However do not do this if you are using SERIAL_MESSAGE
-  Firmata.begin(57600);
+  Firmata.begin(9600);
   while (!Serial) {
     ; // wait for serial port to connect. Needed for ATmega32u4-based boards and Arduino 101
   }
